@@ -42,12 +42,12 @@ class InterpolateRalfTable(object):
 
     def __init__(self, filename, k=3):
         ralf = load_workbook(filename)
-        sheet = ralf.get_sheet_by_name('Sheet1')
-        wave = np.array([d[0].value for d in sheet['A3:A{0}'.format(sheet.max_row)]])
-        theta = np.array([d[0].value for d in sheet['B3:B{0}'.format(sheet.max_row)]])
-        self.orders = -np.array([d.value for d in list(sheet.get_squared_range(3, 2, sheet.max_column, 2))[0]])
-        datagenerator = sheet.get_squared_range(3, 3, sheet.max_column, sheet.max_row)
-        data = np.empty((sheet.max_column - 2, sheet.max_row - 2))
+        sheet = ralf.get_sheet_by_name('4 um')
+        wave = np.array([d[0].value for d in sheet['B5:B{0}'.format(sheet.max_row)]])
+        theta = np.array([d[0].value for d in sheet['C5:C{0}'.format(sheet.max_row)]])
+        self.orders = np.array([d.value for d in list(sheet.get_squared_range(4, 3, sheet.max_column, 3))[0]])
+        datagenerator = sheet.get_squared_range(4, 5, sheet.max_column, sheet.max_row)
+        data = np.empty((sheet.max_column - 3, sheet.max_row - 4))
         for i, r in enumerate(datagenerator):
             for j, d in enumerate(r):
                 data[j, i] = d.value

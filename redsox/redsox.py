@@ -93,11 +93,11 @@ class MirrorEfficiency(optics.FlatOpticalElement):
         return 0.88 * (x / 15 - 1) + 26
 
     def specific_process_photons(self, photons, intersect, interpoos, intercoos):
-        wave_nominal = self.D(intercoos[:, 0])
+        wave_nominal = self.D(intercoos[intersect, 0])
         sigma = wave_nominal * self.sigma_scale / 2.355
         amp = self.amp(wave_nominal)
         gaussians = Gaussian1D(amplitude=amp, mean=wave_nominal, stddev=sigma)
-        return {'probability': gaussians(energy2wave / photons['energy'] * 1e7)}
+        return {'probability': gaussians(energy2wave / photons['energy'][intersect] * 1e7)}
 
 mlkwargs = {'elements': [FlatBrewsterMirror, MirrorEfficiency],
             'keywords': [{}, {'datafile': os.path.join(inputpath, 'ml_refl_2015_minimal.txt')},
