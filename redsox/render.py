@@ -1,3 +1,5 @@
+import numpy as np
+
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from mayavi import mlab
@@ -13,12 +15,16 @@ fig = mlab.figure()
 mlab.clf()
 redsox.redsox.plot(format='mayavi', viewer=fig)
 
-
-my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25)
+angles = np.array([0., 1.5, 1.7, 2 * np.pi])
+prob = np.array([1, 1., 8., 1.])
+my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
+                        polarization={'angle': angles, 'probability': prob})
+my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
+                        polarization=120.)
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
                             reference_transform=redsox.xyz2zxy)
 
-photons = my_source.generate_photons(10000)
+photons = my_source.generate_photons(100000)
 photons = my_pointing(photons)
 
 photons = redsox.redsox(photons)

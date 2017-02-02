@@ -1,4 +1,5 @@
 import os
+import copy
 import numpy as np
 from transforms3d.euler import euler2mat
 import transforms3d
@@ -11,6 +12,7 @@ from marxs import energy2wave
 from marxs.optics.multiLayerMirror import FlatBrewsterMirror
 
 from read_grating_data import InterpolateRalfTable, RalfQualityFactor
+from gratings import GratingGrid
 
 
 def euler2aff(*args, **kwargs):
@@ -57,15 +59,19 @@ order_selector = InterpolateRalfTable(ralfdata)
 # L2 support: blocks 19 %
 catsupport = optics.GlobalEnergyFilter(filterfunc=lambda e: 0.81 * 0.82)
 
+blazeang = 0.8
+blazemat = transforms3d.axangles.axangle2mat(np.array([0, 0, 1]), np.deg2rad(-blazeang))
 grat_args = {'elem_class': optics.CATGrating,
              'elem_args': {'d': 2e-4, 'order_selector': order_selector},
              'id_col': 'grating_id'}
+grat_args_full = copy.deepcopy(grat_args)
+grat_args_full['elem_args']['zoom'] = grating_zoom
+#grat_args_full['elem_args']['orientation'] = np.dot(xyz2zxy[:3, :3], blazemat)
+#grat_args_full['elem_args']['orientation'] = blazemat
+grat_args_full['elem_args']['orientation'] = np.dot(transforms3d.axangles.axangle2mat([1,0,0], np.pi/2), blazemat)
 
-grat1 = simulator.Parallel(elem_pos={'position': grating_pos,
-                                     'orientation': grating_orient,
-                                     'zoom': [grating_zoom] * len(grating_coords)},
-                           id_num_offset=100,
-                           **grat_args)
+grat1 = GratingGrid(id_num_offset=100,
+                    **grat_args_full)
 grat_pos2 = [np.dot(rotchan2, e.pos4d) for e in grat1.elements]
 grat_pos3 = [np.dot(rotchan3, e.pos4d) for e in grat1.elements]
 grat2 = simulator.Parallel(elem_pos=grat_pos2, id_num_offset=200, **grat_args)
@@ -88,16 +94,25 @@ class MirrorEfficiency(optics.FlatOpticalElement):
     def D(self, x):
         '''Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
         where x is measured from the short wavelength end of the mirror.
-        Here, we use a scale that matches the internal coordinate from -1 to 1.
+        In marxs x is measured from the center, so we add 15 mm (the half-length.)
         '''
-        return 0.88 * (x / 15 - 1) + 26
+        return 0.88 * (x + 15) + 26
 
-    def specific_process_photons(self, photons, intersect, interpoos, intercoos):
-        wave_nominal = self.D(intercoos[intersect, 0])
-        sigma = wave_nominal * self.sigma_scale / 2.355
+    def specific_process_photons(self, photons,
+                                 intersect, interpoos, intercoos):
+        cosang = np.dot(photons['dir'].data[intersect, :],
+                        self.geometry('e_x'))
+        wave_braggpeak = 2 * self.D(intercoos[intersect, 0]) * cosang
+        wave_nominal = 2 * self.D(intercoos[intersect, 0]) * 2**(-0.5)
         amp = self.amp(wave_nominal)
-        gaussians = Gaussian1D(amplitude=amp, mean=wave_nominal, stddev=sigma)
-        return {'probability': gaussians(energy2wave / photons['energy'][intersect] * 1e7)}
+        gaussians = Gaussian1D(amplitude=amp, mean=1.,
+                               stddev=self.sigma_scale / 2.355)
+        wave = energy2wave / photons['energy'][intersect] * 1e7
+        return {'probability': gaussians(wave / wave_braggpeak),
+                'wave_nominal': wave_nominal,
+                'wave_braggpeak': wave_braggpeak,
+                'cosang': cosang,
+                'ml_x': intercoos[intersect, 0] }
 
 mlkwargs = {'elements': [FlatBrewsterMirror, MirrorEfficiency],
             'keywords': [{}, {'datafile': os.path.join(inputpath, 'ml_refl_2015_minimal.txt')},
@@ -107,13 +122,14 @@ ml1 = optics.FlatStack(zoom=[0.25, 15., 5.], position=[44.55, 0, 0],
                        orientation=np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
                                           xyz2zxy[:3, :3]),
                        **mlkwargs)
+ml1.loc_coos_name = ['ml1_x', 'ml1_y']
 ml2 = optics.FlatStack(pos4d=np.dot(rotchan2, ml1.pos4d), **mlkwargs)
 ml3 = optics.FlatStack(pos4d=np.dot(rotchan3, ml1.pos4d), **mlkwargs)
 ml = simulator.Sequence(elements=[ml1, ml2, ml3])
 
 # Detectors
 pixsize = 0.016
-detkwargs = {'pixsize': pixsize}
+detkwargs = {'pixsize': pixsize, 'id_col': 'CCD_ID'}
 detzoom = np.array([1, pixsize * 1632 / 2, pixsize * 1608 / 2])
 detposlist = [transforms3d.affines.compose(np.zeros(3), xyz2zxy[:3, :3],
                                            detzoom),
@@ -125,7 +141,6 @@ detposlist.append(np.dot(rotchan3, detposlist[1]))
 det = simulator.Parallel(elem_class=optics.FlatDetector,
                          elem_pos=detposlist,
                          elem_args=detkwargs)
-det.id_col = 'CCD_ID'
 
 # Place an additional detector in the focal plane for comparison
 # Detectors are transparent to allow this stuff
