@@ -109,9 +109,9 @@ class MirrorEfficiency(optics.FlatOpticalElement):
                                stddev=self.sigma_scale / 2.355)
         wave = energy2wave / photons['energy'][intersect] * 1e7
         return {'probability': gaussians(wave / wave_braggpeak),
-                'wave_nominal': wave_nominal,
-                'wave_braggpeak': wave_braggpeak,
-                'cosang': cosang,
+                'mlwave_nominal': wave_nominal,
+                'mlwave_braggpeak': wave_braggpeak,
+                'mlcosang': cosang,
                 'ml_x': intercoos[intersect, 0] }
 
 mlkwargs = {'elements': [FlatBrewsterMirror, MirrorEfficiency],
