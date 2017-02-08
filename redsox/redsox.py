@@ -1,12 +1,13 @@
 import os
 import copy
 import numpy as np
+from scipy.interpolate import interp1d
 from transforms3d.euler import euler2mat
 import transforms3d
 from astropy.table import Table
 
+import marxs
 from marxs import optics, simulator
-from marxs.optics.multiLayerMirror import FlatBrewsterMirror
 
 from read_grating_data import InterpolateRalfTable, RalfQualityFactor
 from gratings import GratingGrid
@@ -30,12 +31,22 @@ rotchan3 = euler2aff(-np.pi * 2 / 3, 0, 0, 'szyz')
 aper = optics.CircleAperture(orientation=xyz2zxy[:3, :3], position=[0, 0, 2700],
                              zoom=[1, 223, 223], r_inner=165)
 
+# Nickel reflectivity
+ni_refl = Table.read(os.path.join(inputpath, 'ni_refl_1deg.txt'),
+                     format='ascii.no_header', data_start=2,
+                     names=['energy', 'refl'])
+
+
 mirror = optics.FlatStack(orientation=xyz2zxy[:3, :3], position=[0, 0, 2500],
                           zoom=[1, 225, 225],
-                          elements=[optics.PerfectLens, optics.RadialMirrorScatter],
+                          elements=[optics.PerfectLens,
+                                    optics.RadialMirrorScatter,
+                                    optics.EnergyFilter],
                           keywords=[{'focallength': 2500},
                                     {'inplanescatter': 30. / 2.3545 / 3600 / 180. * np.pi,
-                                     'perpplanescatter': 10 / 2.345 / 3600. / 180. * np.pi}])
+                                     'perpplanescatter': 10 / 2.345 / 3600. / 180. * np.pi},
+                                    {'filterfunc': interp1d(ni_refl['energy'] * 1e-3, ni_refl['refl']**2)},
+                                    ])
 mirror.elements[1].display = {'color': (0.0, 0.5, 0.0), 'opacity': 0.1}
 
 # Gratings
@@ -74,8 +85,21 @@ grat_pos2 = [np.dot(rotchan2, e.pos4d) for e in grat1.elements]
 grat_pos3 = [np.dot(rotchan3, e.pos4d) for e in grat1.elements]
 grat2 = simulator.Parallel(elem_pos=grat_pos2, id_num_offset=200, **grat_args)
 grat3 = simulator.Parallel(elem_pos=grat_pos3, id_num_offset=300, **grat_args)
+
+
+class CATSupportbars(marxs.base.SimulationSequenceElement):
+    '''carbon fiber structure that holds grating facets will absorb all photons
+    that do not pass through a grating facet.
+
+    We might want to call this L3 support ;-)
+    '''
+    def process_photons(self, photons):
+        photons['probability'][photons['grating_id'] < 0] = 0.
+        return photons
+
+
 grat = simulator.Sequence(elements=[grat1, grat2, grat3, catsupport,
-                                    gratquality])
+                                    gratquality, CATSupportbars()])
 
 
 # ML mirrors
@@ -92,6 +116,9 @@ ml3 = LGMLMirror(datafile=os.path.join(inputpath, 'ml_refl_2015_minimal.txt'),
 ml = simulator.Sequence(elements=[ml1, ml2, ml3])
 
 # Detectors
+
+### TO-DO: detector efficiency. Optical filter of CCD 0
+
 pixsize = 0.016
 detkwargs = {'pixsize': pixsize, 'id_col': 'CCD_ID'}
 detzoom0 = np.array([1, pixsize * 408 / 2, pixsize * 1608 / 2])

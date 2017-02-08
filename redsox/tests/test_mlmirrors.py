@@ -28,3 +28,21 @@ def test_total_refl_probability():
 
     photons = mir(photons)
     assert np.isclose(photons['probability'].sum(), 2. * 0.0858447606431)
+
+    angle = np.arange(0., 360.)
+    pos = np.tile([1., 0., 0., 1], ((len(angle), 1)))
+    dir = np.tile([-1. ,0., 0., 0.], ((len(angle), 1)))
+    polarization = np.zeros_like(dir)
+    polarization[:, 1] = np.cos(np.deg2rad(angle))
+    polarization[:, 2] = np.sin(np.deg2rad(angle))
+
+    wave_at_x0 = 2. * (0.88 * 15 + 26) * np.cos(np.pi / 4) * 1e-7
+    en_at_x0 = energy2wave / wave_at_x0
+    photons = Table({'pos': pos, 'dir': dir,
+                     'energy': en_at_x0 * np.ones(len(angle)),
+                     'polarization': polarization,
+                     'probability': np.ones(len(angle))})
+    mir = LGMLMirror(os.path.join(redsox.inputpath, 'ml_refl_2015_minimal.txt'),
+                     orientation=euler2mat(-np.pi / 4, 0, 0, 'syxz'))
+
+    photons = mir(photons)

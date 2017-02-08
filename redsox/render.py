@@ -8,6 +8,7 @@ from marxs.source import PointSource, FixedPointing
 from marxs.visualization.utils import format_saved_positions
 
 import redsox
+from mirror import Ageom
 
 %matplotlib
 
@@ -16,7 +17,8 @@ mlab.clf()
 out = marxs.visualization.mayavi.plot_object(redsox.redsox, viewer=fig)
 
 my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
-                        polarization=120.)
+                        polarization=120.,
+                        geomarea=Ageom)
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
                             reference_transform=redsox.xyz2zxy)
 
@@ -31,7 +33,8 @@ marxs.visualization.mayavi.plot_rays(pos[ind, :, :], scalar=photons['order'][ind
 
 
 # plot of detector images
-# Note: Order 0 has far too many photons because my entrance aperture is not a ring
+
+import matplotlib.pyplot as plt
 fig = plt.figure()
 for i in range(4):
     ax = fig.add_subplot(2, 2, i+1)

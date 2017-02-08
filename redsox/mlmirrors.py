@@ -54,15 +54,19 @@ class LGMLMirror(optics.FlatBrewsterMirror):
 
     loc_coos_name = ['ml1_x', 'ml1_y']
 
+    display = {'color': (1., 1., 1.),
+               'shape': 'box'
+    }
+
     def fresnel(self, photons, intersect, interpos, intercoos):
         '''The incident angle can easily be calculated from e_x and photons['dir'].'''
         d = self.D(intercoos[intersect, 0])
         dir = norm_vector(photons['dir'].data[intersect, :])
-        cosang = np.arccos(np.einsum('j,ij', -self.geometry('e_x'), dir))
+        arccosang = np.arccos(np.einsum('j,ij', -self.geometry('e_x'), dir))
 
         # get rs and rp from interpol of table
-        rs = self.rs.ev(np.arccos(cosang), d)
-        rp = self.rp.ev(np.arccos(cosang), d)
+        rs = self.rs.ev(arccosang, d)
+        rp = self.rp.ev(arccosang, d)
         scale = 2. / (rs + rp)
         return rs * scale, rp * scale
 
