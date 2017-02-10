@@ -22,13 +22,13 @@ my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
                             reference_transform=redsox.xyz2zxy)
 
-photons = my_source.generate_photons(100000)
+photons = my_source.generate_photons(50)
 photons = my_pointing(photons)
 
 photons = redsox.redsox(photons)
 
 pos = format_saved_positions(redsox.keeppos)
-ind = np.isfinite(photons['order']) & (photons['grating_id'] < 200)
+ind = np.isfinite(photons['order']) & (photons['grating_id'] < 2000)
 marxs.visualization.mayavi.plot_rays(pos[ind, :, :], scalar=photons['order'][ind], viewer=fig)
 
 

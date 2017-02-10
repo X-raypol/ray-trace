@@ -9,8 +9,8 @@ class GratingGrid(ParallelCalculated, OpticalElement):
     id_col = 'facet'
     dg = 0.0002  # in mm
     G = 8.8e-8   # 0.88 Ang / mm
-    beta_lim = np.deg2rad([3, 5.])
-    zoom_grating = [15., 5.]
+    beta_lim = np.deg2rad([3.5, 5.05])
+    zoom_grating = [4., 5.]
 
     def beta_from_betamax(self, betamax):
         '''return beta of granting center given beta on the rightmost border.

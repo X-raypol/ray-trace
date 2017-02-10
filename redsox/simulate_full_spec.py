@@ -47,8 +47,8 @@ src2 = PointSource(coords=SkyCoord(30., 30., unit='deg'),
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
                             reference_transform=redsox.xyz2zxy)
 
-p1 = src1.generate_photons(2e5)
-p2 = src2.generate_photons(2e5)
+p1 = src1.generate_photons(5e3)
+p2 = src2.generate_photons(5e3)
 p = table.vstack([p1, p2])
 p.sort(['time'])
 
