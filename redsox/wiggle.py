@@ -9,6 +9,7 @@ from transforms3d.euler import euler2mat
 import redsox
 import run_tools
 
+
 def maketab_independent_move_rot(move, rot):
     '''Make a wiggle table where each x,y,z is moves / rotated keeping
     all others fixed at 0.'''
@@ -30,9 +31,10 @@ def maketab_independent_move_rot(move, rot):
 
 def affinelemframe(elem, row):
     g = elem.geometry
-    trans = g('e_x') * row['trans_x'] + g('e_y') * row['trans_y'] + g('e_z') * row['trans_z']
-    rot = np.dot(axangle2matt(g('e_z'), row['rot_z']),
-                 np.dot(axangle2mat(g('e_y'), row['rot_y']), axangle2mat(g('e_x'), row['rot_x']))
+    trans = g('e_x')[:3] * row['trans_x'] + g('e_y')[:3] * row['trans_y'] + g('e_z')[:3] * row['trans_z']
+    rot = np.dot(axangle2mat(g('e_z')[:3], row['rot_z']),
+                 np.dot(axangle2mat(g('e_y')[:3], row['rot_y']),
+                        axangle2mat(g('e_x')[:3], row['rot_x']))
           )
     return compose(trans, rot, np.ones(3))
 
@@ -82,9 +84,9 @@ def wiggle_gratings(row):
 
 def run_wiggle(tab, wigglefunc):
     for n in ['aeff', 'modulation']:
-        tab[n] = np.nan * np.ones((len(tab), len(run_toolsenergies)))
-    for i in range(len(table)):
-        print("--- Running wiggle {0} of {1} ---".format(i, len(tab)))
+        tab[n] = np.nan * np.ones((len(tab), len(run_tools.energies), 4))
+    for i in range(len(tab)):
+        print("--- Running wiggle {0} of {1} ---".format(i + 1, len(tab)))
         mission = wigglefunc(tab[i])
         tab['aeff'][i] = run_tools.run_aeff(mission=mission)
         tab['modulation'][i] = run_tools.run_modulation(mission=mission)
