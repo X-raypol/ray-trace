@@ -49,10 +49,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         Path and name to a data table with lab measured reflectivity
         for unpolarized X-ray light.
     '''
-    sigma_scale = 0.01
-    '''Width of the Gaussian.'''
-
-    loc_coos_name = ['ml1_x', 'ml1_y']
+    loc_coos_name = ['ml_x', 'ml_y']
 
     display = {'color': (1., 1., 1.),
                'shape': 'box'
@@ -72,7 +69,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
 
     def __init__(self, datafile, **kwargs):
         data = Table.read(datafile, format='ascii.no_header', data_start=1,
-                          names=['wave', 'R', 'M', 'Fig. Merit'])
+                          names=['wave', 'R', 'M', 'width'])
         self.rs = interpolate.RectBivariateSpline(refl_theory['angle'],
                                                   refl_theory['period_lab'],
                                                   refl_theory['rs'], ky=2)
@@ -81,6 +78,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
                                                   refl_theory['rp'], ky=2)
 
         self.amp = interpolate.interp1d(data['wave'], data['R'])
+        self.width = interpolate.interp1d(data['wave'], data['width'])
         super(LGMLMirror, self).__init__(**kwargs)
 
     def D(self, x):
@@ -97,8 +95,9 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         wave_braggpeak = 2 * self.D(intercoos[intersect, 0]) * cosang
         wave_nominal = 2 * self.D(intercoos[intersect, 0]) * 2**(-0.5)
         amp = self.amp(wave_nominal)
+        width = self.width(wave_nominal)
         gaussians = Gaussian1D(amplitude=amp, mean=1.,
-                               stddev=self.sigma_scale / 2.355)
+                               stddev=width / 2.355)
         wave = energy2wave / photons['energy'][intersect] * 1e7
 
         out = super(LGMLMirror, self).specific_process_photons(photons,

@@ -108,15 +108,17 @@ grat = simulator.Sequence(elements=[grat1, grat2, grat3, catsupport,
 
 
 # ML mirrors
+# mirrorfile = 'ml_refl_2015_minimal.txt'
+mirrorfile = 'ml_refl_2017_withCrSc_width.txt'
 
-ml1 = LGMLMirror(datafile=os.path.join(inputpath, 'ml_refl_2015_minimal.txt'),
+ml1 = LGMLMirror(datafile=os.path.join(inputpath, mirrorfile),
                  zoom=[0.25, 15., 5.], position=[44.55, 0, 0],
                  orientation=np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
                                     xyz2zxy[:3, :3])
 )
-ml2 = LGMLMirror(datafile=os.path.join(inputpath, 'ml_refl_2015_minimal.txt'),
+ml2 = LGMLMirror(datafile=os.path.join(inputpath, mirrorfile),
                  pos4d=np.dot(rotchan2, ml1.pos4d))
-ml3 = LGMLMirror(datafile=os.path.join(inputpath, 'ml_refl_2015_minimal.txt'),
+ml3 = LGMLMirror(datafile=os.path.join(inputpath, mirrorfile),
                  pos4d=np.dot(rotchan3, ml1.pos4d))
 ml = simulator.Sequence(elements=[ml1, ml2, ml3])
 

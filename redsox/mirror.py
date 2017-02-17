@@ -7,6 +7,7 @@ from astropy.table import Table
 
 # Geometric opening
 # From Specifications.txt
+# radii in mm
 tab = '''
 shell  r_out r_int r_in theta
 1 228.840 222.191 202.243 1.270
@@ -22,4 +23,5 @@ shell  r_out r_int r_in theta
 
 t = Table.read(tab, format='ascii')
 t['A'] = np.pi * (t['r_out']**2 - t['r_int']**2)
-Ageom = t['A'].sum() / 100
+
+Ageom = t['A'].sum() / 100   # in cm**2
