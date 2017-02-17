@@ -14,7 +14,7 @@ mypointing = FixedPointing(coords=SkyCoord(30, 30., unit='deg'),
                            reference_transform=redsox.xyz2zxy)
 
 
-def run_aeff(n_photons, outpath, mission):
+def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox):
     '''
 
     Parameters
@@ -44,7 +44,7 @@ def run_aeff(n_photons, outpath, mission):
     return frac_aeff
 
 
-def run_modulation(n_photons, outpath, mission):
+def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox):
 
     modulation = np.zeros((len(energies), 4))
     for i, e in enumerate(energies):
