@@ -14,7 +14,8 @@ mypointing = FixedPointing(coords=SkyCoord(30, 30., unit='deg'),
                            reference_transform=redsox.xyz2zxy)
 
 
-def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox):
+def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox,
+             pointing=mypointing):
     '''
 
     Parameters
@@ -34,7 +35,7 @@ def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox):
                                energy=e, flux=1.)
 
         photons = mysource.generate_photons(n_photons)
-        photons = mypointing(photons)
+        photons = pointing(photons)
         photons = mission(photons)
         if outpath is not None:
             photons.write(os.path.join(outpath,
@@ -44,7 +45,8 @@ def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox):
     return frac_aeff
 
 
-def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox):
+def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox,
+                   pointing=mypointing):
 
     modulation = np.zeros((len(energies), 4))
     for i, e in enumerate(energies):
@@ -57,7 +59,7 @@ def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox):
         p1 = mysource.generate_photons(n_photons)
         p2 = mysource2.generate_photons(n_photons)
         photons = astropy.table.vstack([p1, p2])
-        photons = mypointing(photons)
+        photons = pointing(photons)
         photons = mission(photons)
         if outpath is not None:
             photons.write(os.path.join(outpath,
@@ -65,4 +67,4 @@ def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox):
                           overwrite=True)
 
         modulation[i, :] = calculate_modulation(photons)
-        return modulation
+    return modulation
