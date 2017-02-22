@@ -11,6 +11,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
     G = 8.8e-8   # 0.88 Ang / mm
     beta_lim = np.deg2rad([3.5, 5.05])
     zoom_grating = [4., 5.]
+    d_frame = 0.5
 
     def beta_from_betamax(self, betamax):
         '''return beta of granting center given beta on the rightmost border.
@@ -27,8 +28,8 @@ class GratingGrid(ParallelCalculated, OpticalElement):
 
     def distribute_on_fixed_beta(self, beta):
         l = 2 * np.abs(self.ymax_from_beta(beta))
-        n = np.round(l / (2 * self.zoom_grating[0] + 1.5))
-        y = (np.arange(n) - n/2) * (2 * self.zoom_grating[0] + 1.5)
+        n = np.round(l / (2 * self.zoom_grating[0] + self.d_frame))
+        # y = (np.arange(n) - n/2) * (2 * self.zoom_grating[0] + self.d_frame)
         # unfinished because I realized it's not the best way to do it
         # but I keep it here as reference for later
 
@@ -36,20 +37,20 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         ''' Technically, rg depends on gamma and d_gamma depends on rg and beta
         so this is an iterative problem, but this approximation is good enough for now.
         '''
-        d_gamma = (2 * self.zoom_grating[0] + 1.5) / rg
-        return (np.arange(n) - n/2) * d_gamma
+        d_gamma = (2 * self.zoom_grating[0] + self.d_frame) / rg
+        return (np.arange(n) - n / 2) * d_gamma
 
     def distribute_betas(self):
         beta = []
         betalow = self.beta_lim[1]
         while betalow > self.beta_lim[0]:
             beta.append(self.beta_from_betamax(betalow))
-            betalow = beta[-1] - np.arcsin((self.zoom_grating[1] + 1.5) / self.elem_rg(0., beta[-1]))
+            betalow = beta[-1] - np.arcsin((self.zoom_grating[1] + .5) / self.elem_rg(0., beta[-1]))
 
         betalow = -self.beta_lim[1]
         while betalow < -self.beta_lim[0]:
             beta.append(self.beta_from_betamax(betalow))
-            betalow = beta[-1] + np.arcsin((self.zoom_grating[1] + 1.5) / self.elem_rg(0., beta[-1]))
+            betalow = beta[-1] + np.arcsin((self.zoom_grating[1] + .5) / self.elem_rg(0., beta[-1]))
         return beta
 
     def __init__(self, **kwargs):
@@ -60,11 +61,6 @@ class GratingGrid(ParallelCalculated, OpticalElement):
             kwargs['parallel_spec'] = np.array([0., 1., 0., 0.])
 
         super(GratingGrid, self).__init__(**kwargs)
-
-    def distributeonradius(self):
-        # I can get 8.3 gratings in there. For now, just do 8 rings.
-        # and shift by 4 mm, so some of the "corners" are free.
-        return np.arange(8) * 11.5 + self.r / 0.5 + 4.
 
     def elem_rg(self, gamma, beta):
         return self.dg/(np.sqrt(2) * self.G * np.cos(gamma)**3 * (np.sin(beta) + np.cos(beta)))
