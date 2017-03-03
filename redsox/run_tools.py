@@ -7,8 +7,8 @@ import astropy.table
 
 import redsox
 from analysis import fractional_aeff, calculate_modulation
+from run_settings import wave
 
-wave = np.arange(25., 75., 1.) * u.Angstrom
 energies = wave.to(u.keV, equivalencies=u.spectral()).value
 mypointing = FixedPointing(coords=SkyCoord(30, 30., unit='deg'),
                            reference_transform=redsox.xyz2zxy)
