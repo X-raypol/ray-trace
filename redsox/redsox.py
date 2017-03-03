@@ -84,7 +84,7 @@ grat_args_full['elem_args']['zoom'] = grating_zoom
 #grat_args_full['elem_args']['orientation'] = blazemat
 grat_args_full['elem_args']['orientation'] = np.dot(transforms3d.axangles.axangle2mat([1,0,0], np.pi/2), blazemat)
 
-grat1 = GratingGrid(id_num_offset=1000,
+grat1 = GratingGrid(id_num_offset=1000, zoom_grating=grating_zoom[1:],
                     **grat_args_full)
 grat_pos2 = [np.dot(rotchan2, e.pos4d) for e in grat1.elements]
 grat_pos3 = [np.dot(rotchan3, e.pos4d) for e in grat1.elements]

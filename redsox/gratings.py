@@ -10,7 +10,6 @@ class GratingGrid(ParallelCalculated, OpticalElement):
     dg = 0.0002  # in mm
     G = 8.8e-8   # 0.88 Ang / mm
     beta_lim = np.deg2rad([3.5, 5.05])
-    zoom_grating = [4., 5.]
     d_frame = 0.5
 
     def beta_from_betamax(self, betamax):
@@ -59,7 +58,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
             kwargs['normal_spec'] = np.array([0., 0., 0., 1.])
         if 'parallel_spec' not in kwargs.keys():
             kwargs['parallel_spec'] = np.array([0., 1., 0., 0.])
-
+        self.zoom_grating = kwargs.pop('zoom_grating')
         super(GratingGrid, self).__init__(**kwargs)
 
     def elem_rg(self, gamma, beta):
