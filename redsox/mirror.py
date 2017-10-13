@@ -4,6 +4,7 @@ used there to the real geometric opening.
 '''
 import numpy as np
 from astropy.table import Table
+from astropy import units as u
 
 # Geometric opening
 # From Specifications.txt
@@ -24,4 +25,4 @@ shell  r_out r_int r_in theta
 t = Table.read(tab, format='ascii')
 t['A'] = np.pi * (t['r_out']**2 - t['r_int']**2)
 
-Ageom = t['A'].sum() / 100   # in cm**2
+Ageom = t['A'].sum() * u.mm**2

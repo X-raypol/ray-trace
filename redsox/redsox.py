@@ -110,7 +110,7 @@ grat = simulator.Sequence(elements=[grat1, grat2, grat3, catsupport,
 # ML mirrors
 # mirrorfile = 'ml_refl_2015_minimal.txt'
 mirrorfile = 'ml_refl_2017_withCrSc_width.txt'
-
+LGMLMirror.display['color'] = (1., 0., 1.)
 ml1 = LGMLMirror(datafile=os.path.join(inputpath, mirrorfile),
                  zoom=[0.25, 15., 5.], position=[44.55, 0, 0],
                  orientation=np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
@@ -168,6 +168,11 @@ det123 = simulator.Parallel(elem_class=optics.FlatStack,
                             id_num_offset=1,
                             id_col='CCD_ID')
 det = simulator.Sequence(elements=[det0, det123])
+det0.display = copy.deepcopy(det0.display)
+det0.display['color'] = (0., 0., 1.)
+for e in det123.elements:
+    e.display = copy.deepcopy(e.display)
+    e.display['color'] = (0., 0., 1.)
 
 # Place an additional detector in the focal plane for comparison
 # Detectors are transparent to allow this stuff
