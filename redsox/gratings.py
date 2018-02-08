@@ -24,7 +24,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         '''
         def bm(beta):
             rg = self.elem_rg(0., beta)
-            return np.abs(beta) + np.arcsin(self.conf['gratingzoom'][1] / rg) - np.abs(betamax)
+            return np.abs(beta) + np.arcsin(self.conf['gratingzoom'][2] / rg) - np.abs(betamax)
         return optimize.root(bm, betamax)['x'][0]
 
     def ymax_from_beta(self, beta):
@@ -33,7 +33,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
 
     def distribute_on_fixed_beta(self, beta):
         l = 2 * np.abs(self.ymax_from_beta(beta))
-        n = np.round(l / (2 * self.conf['gratingzoom'][0] + self.d_frame))
+        n = np.round(l / (2 * self.conf['gratingzoom'][1] + self.d_frame))
         # y = (np.arange(n) - n/2) * (2 * self.zoom_grating[0] + self.d_frame)
         # unfinished because I realized it's not the best way to do it
         # but I keep it here as reference for later
@@ -42,7 +42,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         ''' Technically, rg depends on gamma and d_gamma depends on rg and beta
         so this is an iterative problem, but this approximation is good enough for now.
         '''
-        d_gamma = (2 * self.conf['gratingzoom'][0] + self.d_frame) / rg
+        d_gamma = (2 * self.conf['gratingzoom'][1] + self.d_frame) / rg
         return (np.arange(n) - n / 2) * d_gamma
 
     def distribute_betas(self):
@@ -50,12 +50,12 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         betalow = self.conf['beta_lim'][1]
         while betalow > self.conf['beta_lim'][0]:
             beta.append(self.beta_from_betamax(betalow))
-            betalow = beta[-1] - np.arcsin((self.conf['gratingzoom'][1] + .5) / self.elem_rg(0., beta[-1]))
+            betalow = beta[-1] - np.arcsin((self.conf['gratingzoom'][2] + .5) / self.elem_rg(0., beta[-1]))
 
         betalow = -self.conf['beta_lim'][1]
         while betalow < -self.conf['beta_lim'][0]:
             beta.append(self.beta_from_betamax(betalow))
-            betalow = beta[-1] + np.arcsin((self.conf['gratingzoom'][1] + .5) / self.elem_rg(0., beta[-1]))
+            betalow = beta[-1] + np.arcsin((self.conf['gratingzoom'][2] + .5) / self.elem_rg(0., beta[-1]))
         return beta
 
     def __init__(self, channel, conf, **kwargs):

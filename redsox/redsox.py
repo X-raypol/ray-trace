@@ -153,52 +153,52 @@ class Detectors(simulator.Sequence):
     def filterqe(self):
         ccdqe = Table.read(os.path.join(inputpath, 'xgs_bi_ccdqe.dat'),
                            format='ascii.no_header', comment='!',
-                           names=['energy', 'qe' , 'filtertrans', 'temp'])
-        ccdqe['energy'] *= 1e-3  # ev to keV
+                           names=['energy', 'qe', 'filtertrans', 'temp'])
+        ccdqe['energy'] = 1e-3 * ccdqe['energy']  # ev to keV
         return ccdqe
 
     def __init__(self, channels, conf):
-        ccdqe = self.ccedq()
+        ccdqe = self.filterqe()
 
         detkwargs = {'pixsize': conf['pixsize']}
-        detzoom0 = np.array([1, pixsize * conf['detsize0'][0] / 2,
-                             pixsize * conf['detsize0'][1] / 2])
-        detzoom = np.array([1, pixsize * conf['detsize123'][0] / 2,
-                            pixsize * conf['detsize123'][1] / 2])
+        detzoom0 = np.array([1, conf['pixsize'] * conf['detsize0'][0] / 2,
+                             conf['pixsize'] * conf['detsize0'][1] / 2])
+        detzoom = np.array([1, conf['pixsize'] * conf['detsize123'][0] / 2,
+                            conf['pixsize'] * conf['detsize123'][1] / 2])
         # rotate by 45 deg
-        rot = transforms3d.euler.euler2mat(np.pi/4, 0, 0, 'sxyz')
+        rot = transforms3d.euler.euler2mat(np.pi / 4, 0, 0, 'sxyz')
         # flip to x-z plane
         flip = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
-        detposlist = [transforms3d.affines.compose(np.zeros(3), xyz2zxy[:3, :3],
-                                                   detzoom0),
-                      transforms3d.affines.compose([44.55, 25, 0],
+        detposlist = [transforms3d.affines.compose(np.zeros(3),
+                                                   xyz2zxy[:3, :3],
+                                                   detzoom0)]
+        #Position of the detector for channel 1
+        det_channel = transforms3d.affines.compose([44.55, 25, 0],
                                                    np.dot(flip, rot),
-                                                   detzoom)]
-        for chan in '23':
-            detposlist.append(np.dot(conf['rotchan'][chan], detposlist[0]))
-
-
-            ccd123_args = {'elements': [self.elem_class, optics.EnergyFilter],
-                           'keywords': [detkwargs,
-                                        {'filterfunc': interp1d(ccdqe['energy'],
-                                                                ccdqe['qe']),
-                                         'name': 'CCD QE'},
-                                    ],
-                       }
-            ccd0_args = copy.deepcopy(ccd123_args)
-            ccd0_args['keywords'][0]['id_num'] = 0
-            ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
-            # add optical blocking filter for CCD 0
-            ccd0_args['elements'].append(optics.EnergyFilter)
-            ccd0_args['keywords'].append({'filterfunc': interp1d(ccdqe['energy'],
-                                                                 ccdqe['filtertrans']),
-                                          'name': 'optical blocking filter'})
-            det0 = optics.FlatStack(pos4d=detposlist[0], **ccd0_args)
-            det123 = simulator.Parallel(elem_class=optics.FlatStack,
-                                        elem_pos=detposlist[1:],
-                                        elem_args=ccd123_args,
-                                        id_num_offset=1,
-                                        id_col='CCD_ID')
+                                                   detzoom)
+        for chan in channels:
+            detposlist.append(np.dot(conf['rotchan'][chan], det_channel))
+        ccd123_args = {'elements': [self.elem_class, optics.EnergyFilter],
+                       'keywords': [detkwargs,
+                                    {'filterfunc': interp1d(ccdqe['energy'],
+                                                            ccdqe['qe']),
+                                     'name': 'CCD QE'},
+                                ],
+                   }
+        ccd0_args = copy.deepcopy(ccd123_args)
+        ccd0_args['keywords'][0]['id_num'] = 0
+        ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
+        # add optical blocking filter for CCD 0
+        ccd0_args['elements'].append(optics.EnergyFilter)
+        ccd0_args['keywords'].append({'filterfunc': interp1d(ccdqe['energy'],
+                                                             ccdqe['filtertrans']),
+                                      'name': 'optical blocking filter'})
+        det0 = optics.FlatStack(pos4d=detposlist[0], **ccd0_args)
+        det123 = simulator.Parallel(elem_class=optics.FlatStack,
+                                    elem_pos=detposlist[1:],
+                                    elem_args=ccd123_args,
+                                    id_num_offset=1,
+                                    id_col='CCD_ID')
 
         super(Detectors, self).__init__(elements=[det0, det123])
         self.set_display()
@@ -235,8 +235,8 @@ class PerfectRedsox(simulator.Sequence):
     cat_class = CATGratings
     ml_class = MLMirrors
 
-    def add_detectors(self, conf):
-        return [Detectors]
+    def add_detectors(self, channels, conf):
+        return [Detectors(channels, conf)]
 
     def post_process(self):
         self.KeepPos = simulator.KeepCol('pos')
@@ -250,7 +250,7 @@ class PerfectRedsox(simulator.Sequence):
         for c in list_of_classes:
             if c is not None:
                 elem.append(c(channels, conf))
-        elem.extend(self.add_detectors(conf))
+        elem.extend(self.add_detectors(channels, conf))
 
         super(PerfectRedsox, self).__init__(elements=elem,
                                             postprocess_steps=self.post_process(),

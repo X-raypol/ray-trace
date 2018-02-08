@@ -9,41 +9,27 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 import marxs.visualization.mayavi
 from marxs.source import PointSource, FixedPointing
-from marxs.visualization.utils import format_saved_positions
 from marxs.optics import FlatOpticalElement, FlatDetector
 
 import sys
 sys.path.append('../redsox')
 import redsox
-from mirror import Ageom
 from mlmirrors import LGMLMirror
 
 %matplotlib
-redsox.grat_args_full['elem_args']['zoom'] = [.5, 15., 5.]
-grat1 = redsox.GratingGrid(id_num_offset=1000, zoom_grating=[15., 5.],
-                    **redsox.grat_args_full)
-grat_pos2 = [np.dot(redsox.rotchan2, e.pos4d) for e in grat1.elements]
-grat_pos3 = [np.dot(redsox.rotchan3, e.pos4d) for e in grat1.elements]
-grat2 = redsox.simulator.Parallel(elem_pos=grat_pos2, id_num_offset=2000,
-                                  **redsox.grat_args)
-grat3 = redsox.simulator.Parallel(elem_pos=grat_pos3, id_num_offset=3000,
-                                  **redsox.grat_args)
-
-grat = redsox.simulator.Sequence(elements=[grat1, grat2, grat3, redsox.catsupport,
-                                    redsox.gratquality, redsox.CATSupportbars()])
-# Monkey patch redsox.redsox with 30 mm * 10 mm gratings
-redsox.redsox.elements[2] = grat
+conf = copy.deepcopy(redsox.conf)
+conf['gratingzoom'] = [.5, 15., 5.]
+instrum = redsox.PerfectRedsox(conf = conf)
 
 my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
                         polarization=120.,
-                        geomarea=Ageom)
+                        geomarea=instrum.elements[0].area)
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
                             reference_transform=redsox.xyz2zxy)
 
 photons = my_source.generate_photons(2.)
 photons = my_pointing(photons)
-
-photons = redsox.redsox(photons)
+photons = instrum(photons)
 
 
 fig = mlab.figure(**kwargsfig)
@@ -59,11 +45,11 @@ for e in redsox.det123.elements:
     e.display['color'] = (0., 0., 1.)
 
 # Do not plot aperture and mirror
-for e in redsox.redsox.elements[2:]:
+for e in instrum.elements[2:]:
     out = marxsavi.plot_object(e, viewer=fig)
 
-pos_full = format_saved_positions(redsox.keeppos)[:, :, :]
-ind = np.isfinite(photons['order']) & (photons['grating_id'] < 2000)
+pos_full = instrum.KeepPos.format_positions()
+ind = np.isfinite(photons['order']) & (photons['facet'] < 2000)
 pos = np.empty_like(pos_full)
 pos[:, 0:2, :] = pos_full[:, 1:3, :]
 pos[:, 2:, :] = pos_full[:, 2:, :]
