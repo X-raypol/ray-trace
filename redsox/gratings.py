@@ -11,11 +11,23 @@ def blazemat(blazeang):
     return axangle2mat(np.array([0, 0, 1]), blazeang.to(u.rad).value)
 
 
+class ColoringGrating(CATGratingwithL1):
+    def __init__(self, **kwargs):
+        self.colorindex = kwargs.pop('color_index')
+        super(ColoringGrating, self).__init__(**kwargs)
+
+    def specific_process_photons(self, photons, intersect, interpos,
+                                 intercoos):
+        out = super(ColoringGrating, self).specific_process_photons(photons, intersect, interpos, intercoos)
+        out['colorindex'] = [self.colorindex] * intersect.sum()
+        return out
+
+
 class GratingGrid(ParallelCalculated, OpticalElement):
     id_col = 'facet'
     G = 8.8e-8   # 0.88 Ang / mm
     d_frame = 0.5
-    elem_class = CATGratingwithL1
+    elem_class = ColoringGrating
     order_selector = globalorderselector
 
     def beta_from_betamax(self, betamax):
@@ -43,7 +55,8 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         so this is an iterative problem, but this approximation is good enough for now.
         '''
         d_gamma = (2 * self.conf['gratingzoom'][1] + self.d_frame) / rg
-        return (np.arange(n) - n / 2) * d_gamma
+        # Need to change arange(3)=[0, 1, 2] to [-1, 0, 1], so add -n/2+0.5
+        return (np.arange(n) - n / 2 + 0.5) * d_gamma
 
     def distribute_betas(self):
         beta = []
@@ -72,6 +85,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
                                'zoom': conf['gratingzoom'],
                                'orientation': np.dot(axangle2mat([1, 0, 0], np.pi / 2),
                                                      blazemat(conf['blazeang'])),
+                               'color_index': kwargs.pop('color_index'),
                                }
         super(GratingGrid, self).__init__(**kwargs)
         self.elem_pos = [np.dot(conf['rotchan'][channel], e) for e in self.elem_pos]

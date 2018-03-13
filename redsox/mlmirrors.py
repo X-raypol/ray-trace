@@ -52,7 +52,8 @@ class LGMLMirror(optics.FlatBrewsterMirror):
     loc_coos_name = ['ml_x', 'ml_y']
 
     display = {'color': (1., 1., 1.),
-               'shape': 'box'
+               'shape': 'box',
+               'box-half': '+x',
     }
 
     def fresnel(self, photons, intersect, interpos, intercoos):

@@ -31,10 +31,11 @@ def FWHMarcs2sigrad(x):
     return x / 2.3545 / 3600 / 180. * np.pi
 
 
-conf = {'aper_z': 2700.,
+conf = {'aper_z': 2900.,
         'aper_rin': 165.,
         'aper_rout': 223.,
-        'mirr_rout': 225,
+        'mirr_rout': 228,
+        'mirr_length': 300,
         'f': 2500,
         'inscat': FWHMarcs2sigrad(30.),
         'perpscat': FWHMarcs2sigrad(10.),
@@ -57,6 +58,11 @@ conf = {'aper_z': 2700.,
 
 # Aperture
 class CircleAperture(optics.CircleAperture):
+    display = {'color': (0.0, 0.75, 0.75),
+               'opacity': 0.3,
+               'outer_factor': 1.5,
+               'shape': 'triangulation'}
+
     def __init__(self, channels, conf):
         super(CircleAperture, self).__init__(orientation=xyz2zxy[:3, :3],
                                              position=[0, 0, conf['aper_z']],
@@ -69,6 +75,8 @@ class SimpleMirror(optics.FlatStack):
     # Scatter as FWHM ~30 arcsec. Divide by 2.3545 to get Gaussian sigma.
     # Scatter numbers are still all wrong.
     spider_fraction = 0.88
+    display = {'shape': 'cylinder',
+               'color': (.7, .7, .7)}
 
     def refl(self):
         '''Read Ni reflectivity'''
@@ -89,19 +97,16 @@ class SimpleMirror(optics.FlatStack):
                    'name': 'support spider'}]
         super(SimpleMirror, self).__init__(orientation=xyz2zxy[:3, :3],
                                            position=[0, 0, conf['f']],
-                                           zoom=[1, conf['mirr_rout'],
+                                           zoom=[conf['mirr_length'],
+                                                 conf['mirr_rout'],
                                                  conf['mirr_rout']],
                                            elements=[optics.PerfectLens,
                                                      optics.RadialMirrorScatter,
                                                      optics.EnergyFilter,
                                                      optics.EnergyFilter],
                                            keywords=kwords)
-        self.set_display()
 
-    def set_display(self):
-        self.elements[1].display = {'color': (0.0, 0.5, 0.0), 'opacity': 0.1}
 
-# Gratings
 def read_grating_coords():
     '''Read grating coordinates from a file. This is currently not used.'''
     grating_coords = Table.read(os.path.join(redsoxbase, 'GratingCoordinates.txt'),
@@ -116,6 +121,9 @@ def read_grating_coords():
 
 class CATGratings(simulator.Sequence):
     gratquality_class = RalfQualityFactor
+    colors = 'ryg'
+    color_chan = {'1': 'r', '2': 'y', '3': 'g'}
+    color_index = {'1': 0, '2': 1, '3': 2}
 
     def __init__(self, channels, conf, **kwargs):
 
@@ -123,7 +131,12 @@ class CATGratings(simulator.Sequence):
 
         self.gratquality = self.gratquality_class()
         for chan in channels:
-            elements.append(GratingGrid(channel=chan, conf=conf))
+            gg = GratingGrid(channel=chan, conf=conf,
+                             color_index=self.color_index[chan])
+            disp = {'shape': 'box', 'color': self.color_chan[chan]}
+            for e in gg.elements:
+                e.display = disp
+            elements.append(gg)
         elements.extend([catsupport, catsupportbars, self.gratquality])
         super(CATGratings, self).__init__(elements=elements, **kwargs)
 
@@ -178,21 +191,21 @@ class Detectors(simulator.Sequence):
                                                    detzoom)
         for chan in channels:
             detposlist.append(np.dot(conf['rotchan'][chan], det_channel))
-        ccd123_args = {'elements': [self.elem_class, optics.EnergyFilter],
-                       'keywords': [detkwargs,
+        ccd123_args = {'elements': (self.elem_class, optics.EnergyFilter),
+                       'keywords': (detkwargs,
                                     {'filterfunc': interp1d(ccdqe['energy'],
                                                             ccdqe['qe']),
                                      'name': 'CCD QE'},
-                                ],
+                                ),
                    }
         ccd0_args = copy.deepcopy(ccd123_args)
         ccd0_args['keywords'][0]['id_num'] = 0
         ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
         # add optical blocking filter for CCD 0
-        ccd0_args['elements'].append(optics.EnergyFilter)
-        ccd0_args['keywords'].append({'filterfunc': interp1d(ccdqe['energy'],
+        ccd0_args['elements'] +=  (optics.EnergyFilter, )
+        ccd0_args['keywords'] += ({'filterfunc': interp1d(ccdqe['energy'],
                                                              ccdqe['filtertrans']),
-                                      'name': 'optical blocking filter'})
+                                      'name': 'optical blocking filter'}, )
         det0 = optics.FlatStack(pos4d=detposlist[0], **ccd0_args)
         det123 = simulator.Parallel(elem_class=optics.FlatStack,
                                     elem_pos=detposlist[1:],
@@ -204,11 +217,13 @@ class Detectors(simulator.Sequence):
         self.set_display()
 
     def set_display(self):
-        self.elements[0].display = copy.deepcopy(self.elements[0].display)
-        self.elements[0].display['color'] = (0., 0., 1.)
+        self.disp = copy.deepcopy(self.elements[0].display)
+        self.disp['color'] = (0., 0., 1.)
+        self.disp['box-half'] = '+x'
+
+        self.elements[0].display = self.disp
         for e in self.elements[1].elements:
-            e.display = copy.deepcopy(e.display)
-            e.display['color'] = (0., 0., 1.)
+            e.display = self.disp
 
 
 class FocalPlaneDet(marxs.optics.FlatDetector):
