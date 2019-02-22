@@ -30,7 +30,7 @@ def run_aeff(n_photons=10000, outpath=None, mission=redsox.redsox,
     '''
     frac_aeff = np.zeros((len(energies), 4))
     for i, e in enumerate(energies):
-        print '{0}/{1}'.format(i + 1, len(energies))
+        print('{0}/{1}'.format(i + 1, len(energies)))
         mysource = PointSource(coords=SkyCoord(30., 30., unit='deg'),
                                energy=e, flux=1.)
 
@@ -50,7 +50,7 @@ def run_modulation(n_photons=10000, outpath=None, mission=redsox.redsox,
 
     modulation = np.zeros((len(energies), 4))
     for i, e in enumerate(energies):
-        print '{0}/{1}'.format(i + 1, len(energies))
+        print('{0}/{1}'.format(i + 1, len(energies)))
         mysource = PointSource(coords=SkyCoord(30., 30., unit='deg'),
                                energy=e, flux=1., polarization=0.)
         mysource2 = PointSource(coords=SkyCoord(30., 30., unit='deg'),

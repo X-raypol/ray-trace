@@ -10,18 +10,17 @@ import astropy.units as u
 import marxs
 from marxs import optics, simulator
 
-from arcus.ralfgrating import (RalfQualityFactor,
-                               catsupport, catsupportbars)
-from gratings import GratingGrid
-from mlmirrors import LGMLMirror
+from marxs.missions.mitsnl.catgrating import catsupportbars
+from .gratings import GratingGrid
+from .mlmirrors import LGMLMirror
+
+from . import redsoxbase, inputpath
 
 
 def euler2aff(*args, **kwargs):
     mat = euler2mat(*args, **kwargs)
     return transforms3d.affines.compose(np.zeros(3), mat, np.ones(3))
 
-redsoxbase = '/melkor/d1/guenther/Dropbox/REDSoX File Transfers'
-inputpath = os.path.join(redsoxbase, 'raytrace', 'inputdata')
 
 xyz2zxy = np.array([[0., 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]]).T
 
@@ -40,7 +39,8 @@ conf = {'aper_z': 2900.,
         'inscat': FWHMarcs2sigrad(30.),
         'perpscat': FWHMarcs2sigrad(10.),
         'blazeang': 0.8 * u.degree,
-        'gratingzoom': [0.25, 4, 5],
+        'gratingzoom': [0.25, 15, 5],
+        'gratingframe': [0, 1.5, .5],
         'd': 2e-4,
         'rotchan': {'1': np.eye(4),
                     '2': euler2aff(np.pi * 2 / 3, 0, 0, 'szyz'),
@@ -120,7 +120,6 @@ def read_grating_coords():
 
 
 class CATGratings(simulator.Sequence):
-    gratquality_class = RalfQualityFactor
     colors = 'ryg'
     color_chan = {'1': 'r', '2': 'y', '3': 'g'}
     color_index = {'1': 0, '2': 1, '3': 2}
@@ -129,16 +128,16 @@ class CATGratings(simulator.Sequence):
 
         elements = []
 
-        self.gratquality = self.gratquality_class()
         for chan in channels:
             gg = GratingGrid(channel=chan, conf=conf,
-                             color_index=self.color_index[chan])
+                             # color_index=self.color_index[chan]
+            )
             disp = {'shape': 'box', 'color': self.color_chan[chan]}
             for e in gg.elements:
                 e.display = disp
             elements.append(gg)
-        elements.extend([catsupport, catsupportbars, self.gratquality])
-        super(CATGratings, self).__init__(elements=elements, **kwargs)
+        elements.append(catsupportbars)
+        super().__init__(elements=elements, **kwargs)
 
 
 class MLMirrors(simulator.Parallel):
@@ -202,7 +201,7 @@ class Detectors(simulator.Sequence):
         ccd0_args['keywords'][0]['id_num'] = 0
         ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
         # add optical blocking filter for CCD 0
-        ccd0_args['elements'] +=  (optics.EnergyFilter, )
+        ccd0_args['elements'] += (optics.EnergyFilter, )
         ccd0_args['keywords'] += ({'filterfunc': interp1d(ccdqe['energy'],
                                                              ccdqe['filtertrans']),
                                       'name': 'optical blocking filter'}, )
