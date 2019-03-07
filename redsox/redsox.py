@@ -9,20 +9,19 @@ import astropy.units as u
 
 import marxs
 from marxs import optics, simulator
+import marxs.design.tolerancing as tol
 
 from marxs.missions.mitsnl.catgrating import catsupportbars
 from .gratings import GratingGrid
 from .mlmirrors import LGMLMirror
+from .tolerances import move_mirror
 
-from . import redsoxbase, inputpath
+from . import redsoxbase, inputpath, xyz2zxy
 
 
 def euler2aff(*args, **kwargs):
     mat = euler2mat(*args, **kwargs)
     return transforms3d.affines.compose(np.zeros(3), mat, np.ones(3))
-
-
-xyz2zxy = np.array([[0., 0, 1, 0], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]]).T
 
 
 def FWHMarcs2sigrad(x):
@@ -53,6 +52,7 @@ conf = {'aper_z': 2900.,
         'pixsize': 0.016,
         'detsize0': [408, 1608],
         'detsize123': [1632, 1608],
+        'bend': 1664,
         }
 
 
@@ -128,14 +128,26 @@ class CATGratings(simulator.Sequence):
 
         elements = []
 
+        # All all top sectors first so that a ray passing though overlapping top and
+        # bottom sectors correctly passes through the top grating first.
         for chan in channels:
-            gg = GratingGrid(channel=chan, conf=conf,
+            gg = GratingGrid(channel=chan, conf=conf, y_in=[-220, -50],
+                             id_num_offset=conf['grat_id_offset'][chan]
                              # color_index=self.color_index[chan]
             )
-            disp = {'shape': 'box', 'color': self.color_chan[chan]}
             for e in gg.elements:
-                e.display = disp
+                e.display['color'] = self.color_chan[chan]
             elements.append(gg)
+        # then add bottom sectors as requested
+        for chan in channels:
+            gg = GratingGrid(channel=chan, conf=conf, y_in=[50, 220],
+                             id_num_offset=conf['grat_id_offset'][chan] + 500
+                             # color_index=self.color_index[chan]
+            )
+            for e in gg.elements:
+                e.display['color'] = self.color_chan[chan]
+            elements.append(gg)
+
         elements.append(catsupportbars)
         super().__init__(elements=elements, **kwargs)
 
@@ -269,3 +281,75 @@ class PerfectRedsox(simulator.Sequence):
         super(PerfectRedsox, self).__init__(elements=elem,
                                             postprocess_steps=self.post_process(),
                                             **kwargs)
+
+
+class Redsox(PerfectRedsox):
+    def __init__(self, channels=['1', '2', '3'], conf=conf,
+                 **kwargs):
+        super().__init__(conf=conf, channels=channels, **kwargs)
+        for row in conf['alignmentbudget']:
+            elem = self.elements_of_class(row[0])
+            if row[1] == 'global':
+                tol.moveglobal(elem, *row[3])
+            elif row[1] == 'individual':
+                tol.wiggle(elem, *row[3])
+            elif row[1] == 'mirror':
+                move_mirror(elem[0], *row[3])
+            else:
+                raise NotImplementedError('Alignment error {} not implemented'.format(row[1]))
+
+
+def reformat_errorbudget(budget, globalfac=0.8):
+    '''Reformat the numbers from LSF-CAT-Alignment-v3.xls
+
+    Randall gives 3 sigma errors, while I need 1 sigma a input here.
+    Also, units need to be converted: mu -> mm, arcsec -> rad
+    Last, global misalignment (that's not random) must be
+    scaled in some way. Here, I use 0.8 sigma, which is the
+    mean absolute deviation for a Gaussian.
+
+    Parameters
+    ----------
+    budget : list
+        See reference implementation for list format
+    globalfac : ``None`` or float
+        Factor to apply for global tolerances. A "global" tolerance is drawn
+        only once per simulation. In contrast, for "individual" tolerances
+        many draws are done and thus the resulting layout actually
+        represents a distribution. For a "global" tolerance, the result hinges
+        essentially on a single random draw. If this is set to ``None``,
+        misalignments are drawn statistically. Instead, the toleracnes can be
+        scaled determinisitically, e.g. by "0.8 sigma" (the mean absolute
+        deviation for a Gaussian distribution).
+    '''
+    for row in budget:
+        tol = np.array(row[2], dtype=float)
+        tol[:3] = tol[:3] / 1000.  # mu to mm
+        tol[3:] = np.deg2rad(tol[3:] / 3600.)  # arcsec to rad
+        tol = tol / 3   # Randall gives 3 sigma values
+        if row[1] == 'global':
+            if globalfac is not None:
+                tol *= globalfac
+            else:
+                tol *= np.random.randn(len(tol))
+
+        row[3] = tol
+
+
+align_requirement_moritz = [
+    [SimpleMirror, 'mirror', [12.5, 100, 50, 300, 300, 10],
+     None, 'Mirror with respect to its center of mass'],
+    [GratingGrid, 'global', [0., 0, 0, 0, 0, 0],
+     None, 'Grating petal to structure'],
+    [GratingGrid, 'global', [1000, 1000, 1000, 300, 300, 600],
+     None, 'CAT grating to petal'],
+    [MLMirrors, 'global', [1000, 1000, 200, 300., 180, 300],
+     None, 'CAT windows to CAT petal'],
+    [Detectors, 'global', [1000, 1000, 200, 300, 180, 300],
+     None, 'individual CAT to window'],
+]
+
+align_requirement = copy.deepcopy(align_requirement_moritz)
+reformat_errorbudget(align_requirement)
+
+conf['alignmentbudget'] = align_requirement

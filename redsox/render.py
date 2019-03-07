@@ -5,31 +5,34 @@ from astropy import units as u
 from mayavi import mlab
 import marxs.visualization.mayavi
 from marxs.source import PointSource, FixedPointing
-from marxs.visualization.utils import format_saved_positions
+from marxs.visualization.mayavi import plot_object, plot_rays
 
-import redsox
-from mirror import Ageom
+from redsox.redsox import PerfectRedsox, xyz2zxy
+from redsox.mirror import Ageom
 
 %matplotlib
 
+instrum = PerfectRedsox()
+
 fig = mlab.figure()
 mlab.clf()
-out = marxs.visualization.mayavi.plot_object(redsox.redsox, viewer=fig)
+
+out = plot_object(instrum, viewer=fig)
 
 my_source = PointSource(coords=SkyCoord(30., 30., unit='deg'), energy=0.25,
                         polarization=120.,
                         geomarea=Ageom)
 my_pointing = FixedPointing(coords=SkyCoord(30., 30., unit='deg'),
-                            reference_transform=redsox.xyz2zxy)
+                            reference_transform=xyz2zxy)
 
-photons = my_source.generate_photons(50)
+photons = my_source.generate_photons(10)
 photons = my_pointing(photons)
 
-photons = redsox.redsox(photons)
+photons = instrum(photons)
 
-pos = format_saved_positions(redsox.keeppos)
-ind = np.isfinite(photons['order']) & (photons['grating_id'] < 2000)
-marxs.visualization.mayavi.plot_rays(pos[ind, :, :], scalar=photons['order'][ind], viewer=fig)
+pos = instrum.KeepPos.format_positions()
+ind = np.isfinite(photons['order']) & (photons['facet'] < 2000) & (photons['CCD_ID'] >= 0)
+out = marxs.visualization.mayavi.plot_rays(pos[ind, :, :], scalar=photons['order'][ind], viewer=fig)
 
 
 # plot of detector images

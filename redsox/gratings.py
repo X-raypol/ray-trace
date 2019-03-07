@@ -4,11 +4,14 @@ from warnings import warn
 import numpy as np
 from scipy import optimize
 import astropy.units as u
+from marxs.math.geometry import Cylinder
+from marxs.math.utils import h2e
 from marxs.optics import OpticalElement
 from marxs.simulator import ParallelCalculated
 from marxs.missions.mitsnl.catgrating import (CATL1L2Stack,
                                               InterpolateEfficiencyTable)
 from transforms3d.axangles import axangle2mat
+from transforms3d.affines import decompose
 
 from . import inputpath
 
@@ -17,8 +20,45 @@ globalorderselector = InterpolateEfficiencyTable(os.path.join(inputpath,
 
 # Fix color index coloring and activate in redsox again
 
+
 def blazemat(blazeang):
     return axangle2mat(np.array([0, 0, 1]), blazeang.to(u.rad).value)
+
+
+def bend_gratings(gratings, r_elem=1664):
+    '''Bend gratings in a gas to follow the Rowland cirle
+
+    Gratings are bend in one direction (the dispersion direction) only.
+
+    Assumes that the focal point is at the origin of the coordinate system!
+
+    Parameters
+    ----------
+    gratings : list
+        List of gratings to be bend
+    '''
+    for e in gratings:
+        t, rot, z, s = decompose(e.geometry.pos4d)
+        d_phi = np.arctan(z[1] / r_elem)
+        c = Cylinder({'position': t - r_elem * h2e(e.geometry['e_x']),
+                      'orientation': rot,
+                      'zoom': [r_elem, r_elem, z[2]],
+                      'phi_lim': [-d_phi, d_phi]})
+        c._geometry = e.geometry._geometry
+        e.geometry = c
+        e.display['shape'] = 'surface'
+        for e1 in e.elements:
+            # can't be the same geometry, because groove_angle is part of _geometry and that's different
+            # Maybe need to get that out again and make the geometry strictly the geometry
+            # But for now, make a new cylinder of each of them
+            # Even now, not sure that's needed, since intersect it run by FlatStack
+            c = Cylinder({'position': t - r_elem * h2e(e.geometry['e_x']),
+                          'orientation': rot,
+                          'zoom': [r_elem, r_elem, z[2]],
+                          'phi_lim': [-d_phi, d_phi]})
+            c._geometry = e1.geometry._geometry
+            e1.geometry = c
+            e1.display['shape'] = 'surface'
 
 
 class ColoringGrating(CATL1L2Stack):
@@ -37,18 +77,19 @@ class ColoringGrating(CATL1L2Stack):
 class GratingGrid(ParallelCalculated, OpticalElement):
     id_col = 'facet'
     G = 8.8e-8   # 0.88 Ang / mm
-    d_frame = 0.5
     elem_class = CATL1L2Stack
     order_selector = globalorderselector
 
-    def __init__(self, channel, conf, **kwargs):
+    def __init__(self, channel, conf, y_in, **kwargs):
         kwargs['pos_spec'] = self.elempos
         if 'normal_spec' not in kwargs.keys():
             kwargs['normal_spec'] = np.array([0., 0., 0., 1.])
         if 'parallel_spec' not in kwargs.keys():
             kwargs['parallel_spec'] = np.array([0., 1., 0., 0.])
         self.conf = conf
+        self.bend = self.conf['bend']
         self.channel = channel
+        self.y_in = y_in
         kwargs['elem_class'] = self.elem_class
         kwargs['elem_args'] = {'d': conf['d'],
                                'order_selector': self.order_selector,
@@ -91,13 +132,12 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         return sol.root
 
     def elempos(self):
-        '''This elempos make a regular grid, very similar to Mark Egan's design.'''
+        '''This elempos makes a regular grid, very similar to Mark Egan's design.'''
         dx = 2 * self.conf['gratingzoom'][1] + 2 * self.conf['gratingframe'][1]
         dy = 2 * self.conf['gratingzoom'][2] + 2 * self.conf['gratingframe'][2]
         x = np.arange(dx / 2, 100, dx)
         x = np.hstack([-x, x])
-        y = np.arange(50, 220, dy)
-        y = np.hstack([-y, y])
+        y = np.arange(self.y_in[0], self.y_in[1], dy)
         mx, my = np.meshgrid(x, y)
         mx = mx.flatten()
         my = my.flatten()
@@ -115,3 +155,8 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         ind = (np.abs(beta) > ang_in) & (np.abs(beta) < ang_out)
 
         return np.vstack([mx[ind], my[ind], z[ind], np.ones(ind.sum())]).T
+
+    def generate_elements(self):
+        super().generate_elements()
+        if self.bend:
+            bend_gratings(self.elements, r_elem=self.bend)

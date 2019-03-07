@@ -16,7 +16,7 @@ def fractional_aeff(photons, filterfunc=None):
     Returns
     -------
     prop : np.array
-        Probability for a photon to be detected on CCD 0,1,2, or 3
+        Probability for a photon to be detected on CCD 0, 1, 2, or 3
     '''
     prob = np.zeros(4, dtype=float)
     for i in [0, 1, 2, 3]:

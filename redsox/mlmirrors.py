@@ -60,7 +60,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         '''The incident angle can easily be calculated from e_x and photons['dir'].'''
         d = self.D(intercoos[intersect, 0])
         dir = norm_vector(photons['dir'].data[intersect, :])
-        arccosang = np.arccos(np.einsum('j,ij', -self.geometry('e_x'), dir))
+        arccosang = np.arccos(np.einsum('j,ij', -self.geometry['e_x'], dir))
 
         # get rs and rp from interpol of table
         rs = self.rs.ev(arccosang, d)
@@ -92,7 +92,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
     def specific_process_photons(self, photons,
                                  intersect, interpoos, intercoos):
         cosang = np.dot(photons['dir'].data[intersect, :],
-                        -self.geometry('e_x'))
+                        -self.geometry['e_x'])
         wave_braggpeak = 2 * self.D(intercoos[intersect, 0]) * cosang
         wave_nominal = 2 * self.D(intercoos[intersect, 0]) * 2**(-0.5)
         amp = self.amp(wave_nominal)
