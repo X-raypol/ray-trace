@@ -14,7 +14,7 @@ import marxs.design.tolerancing as tol
 from marxs.missions.mitsnl.catgrating import catsupportbars
 from .gratings import GratingGrid
 from .mlmirrors import LGMLMirror
-from .tolerances import move_mirror
+from .tolerances import MirrorMover
 
 from . import redsoxbase, inputpath, xyz2zxy
 
@@ -283,10 +283,11 @@ class PerfectRedsox(simulator.Sequence):
                                             **kwargs)
 
 
-class Redsox(PerfectRedsox):
+class MisalignedRedsox(PerfectRedsox):
     def __init__(self, channels=['1', '2', '3'], conf=conf,
                  **kwargs):
         super().__init__(conf=conf, channels=channels, **kwargs)
+        move_mirror = MirrorMover(conf)
         for row in conf['alignmentbudget']:
             elem = self.elements_of_class(row[0])
             if row[1] == 'global':
@@ -300,9 +301,7 @@ class Redsox(PerfectRedsox):
 
 
 def reformat_errorbudget(budget, globalfac=0.8):
-    '''Reformat the numbers from LSF-CAT-Alignment-v3.xls
-
-    Randall gives 3 sigma errors, while I need 1 sigma a input here.
+    '''
     Also, units need to be converted: mu -> mm, arcsec -> rad
     Last, global misalignment (that's not random) must be
     scaled in some way. Here, I use 0.8 sigma, which is the
@@ -323,11 +322,12 @@ def reformat_errorbudget(budget, globalfac=0.8):
         deviation for a Gaussian distribution).
     '''
     for row in budget:
-        tol = np.array(row[2], dtype=float)
-        tol[:3] = tol[:3] / 1000.  # mu to mm
-        tol[3:] = np.deg2rad(tol[3:] / 3600.)  # arcsec to rad
-        tol = tol / 3   # Randall gives 3 sigma values
-        if row[1] == 'global':
+        tol = np.zeros(6)
+        for i in [0, 1, 2]:
+            tol[i] = row[2][i].to(u.mm).value
+        for i in [3, 4, 5]:
+            tol[i] = row[2][i].to(u.rad).value
+        if (row[1] == 'global') or (row[1] == 'mirror'):
             if globalfac is not None:
                 tol *= globalfac
             else:
@@ -337,19 +337,19 @@ def reformat_errorbudget(budget, globalfac=0.8):
 
 
 align_requirement_moritz = [
-    [SimpleMirror, 'mirror', [12.5, 100, 50, 300, 300, 10],
-     None, 'Mirror with respect to its center of mass'],
-    [GratingGrid, 'global', [0., 0, 0, 0, 0, 0],
+    #[SimpleMirror, 'mirror', [.1*u.mm, .1*u.mm, 5*u.mm, .5*u.degree, .5*u.degree, 10*u.degree],
+    # None, 'Mirror with respect to its center of mass'],
+    [GratingGrid, 'global', [1*u.mm, 1*u.mm, 1*u.mm, .1*u.degree, .1*u.degree, 1*u.degree],
      None, 'Grating petal to structure'],
-    [GratingGrid, 'global', [1000, 1000, 1000, 300, 300, 600],
+    [GratingGrid, 'individual', [.5*u.mm, .5*u.mm, .5*u.mm, .1*u.degree, .1*u.degree, 1*u.degree],
      None, 'CAT grating to petal'],
-    [MLMirrors, 'global', [1000, 1000, 200, 300., 180, 300],
-     None, 'CAT windows to CAT petal'],
-    [Detectors, 'global', [1000, 1000, 200, 300, 180, 300],
-     None, 'individual CAT to window'],
+    [MLMirrors, 'global', [.1*u.mm, .2*u.mm, 1*u.mm, .25*u.degree, .25*u.degree, 1*u.degree],
+     None, 'ML mirror'],
+    #[Detectors, 'global', [2*u.mm, 2*u.mm, 2*u.mm, 5*u.degree, 5*u.degree, 5*u.degree],
+    # None, 'individual CAT to window'],
 ]
 
 align_requirement = copy.deepcopy(align_requirement_moritz)
-reformat_errorbudget(align_requirement)
+reformat_errorbudget(align_requirement, 1.)
 
 conf['alignmentbudget'] = align_requirement
