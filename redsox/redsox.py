@@ -175,7 +175,7 @@ class Detectors(simulator.Sequence):
     elem_class = optics.FlatDetector
 
     def filterqe(self):
-        ccdqe = Table.read(os.path.join(inputpath, 'xgs_bi_ccdqe.dat'),
+        ccdqe = Table.read(os.path.join(inputpath, 'ccd097.txt'),
                            format='ascii.no_header', comment='!',
                            names=['energy', 'qe', 'filtertrans', 'temp'])
         ccdqe['energy'] = 1e-3 * ccdqe['energy']  # ev to keV
