@@ -46,9 +46,15 @@ conf = {'aper_z': 2900.,
                     '3': euler2aff(-np.pi * 2 / 3, 0, 0, 'szyz')},
         'grat_id_offset': {'1': 1000, '2': 2000, '3': 3000},
         'beta_lim': np.deg2rad([3.5, 5.05]),
-        'mirrorfile': 'ml_refl_2017_withCrSc_width.txt',
-        'MLzoom': [0.25, 15., 5.],
-        'MLpos': [44.55, 0, 0],
+        'ML' = {'mirrorfile': 'ml_refl_2017_withCrSc_width.txt',
+                'zoom': [0.25, 15., 5.],
+                'pos': [44.55, 0, 0],
+    # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
+    # where x is measured from the short wavelength end of the mirror.
+    # In marxs x is measured from the center, so we add 15 mm (the half-length.)
+                'lateral_gradient': 0.88,  # Ang/mm
+                'spacing_at_center': 0.88 * (0 + 15) + 26,
+                },
         'pixsize': 0.016,
         'detsize0': [408, 1608],
         'detsize123': [1632, 1608],
@@ -156,17 +162,20 @@ class MLMirrors(simulator.Parallel):
     elem_class = LGMLMirror
 
     def __init__(self, channels, conf):
-        lgmlpos = [transforms3d.affines.compose(conf['MLpos'],
+        c = conf['ML']
+        lgmlpos = [transforms3d.affines.compose(c['pos'],
                                                 np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
                                                        xyz2zxy[:3, :3]),
-                                                conf['MLzoom'])]
+                                                c['zoom'])]
         for chan in '23':
             lgmlpos.append(np.dot(conf['rotchan'][chan], lgmlpos[0]))
 
-        datafile = os.path.join(inputpath, conf['mirrorfile'])
+        datafile = os.path.join(inputpath, c['mirrorfile'])
         super(MLMirrors, self).__init__(elem_class=self.elem_class,
                                         elem_pos=lgmlpos,
-                                        elem_args={'datafile': datafile},
+                                        elem_args={'datafile': datafile,
+                                                   'lateral_gradient': c['lateral_gradient'],
+                                                   'spacing_at_center': c['spacinf_at_center']},
                                         id_num_offset=1,
                                         id_col='LGML')
 

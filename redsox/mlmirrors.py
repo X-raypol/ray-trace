@@ -68,7 +68,9 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         scale = 2. / (rs + rp)
         return rs * scale, rp * scale
 
-    def __init__(self, datafile, **kwargs):
+    def __init__(self, datafile, lateral_gradient, spacing_at_center, **kwargs):
+        self.lateral_gradient = lateral_gradient
+        self.spacing_at_center = spacing_at_center
         data = Table.read(datafile, format='ascii.no_header', data_start=1,
                           names=['wave', 'R', 'M', 'width'])
         self.rs = interpolate.RectBivariateSpline(refl_theory['angle'],
@@ -83,11 +85,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         super(LGMLMirror, self).__init__(**kwargs)
 
     def D(self, x):
-        '''Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
-        where x is measured from the short wavelength end of the mirror.
-        In marxs x is measured from the center, so we add 15 mm (the half-length.)
-        '''
-        return 0.88 * (x + 15) + 26
+        return self.lateral_gradient * x + self.spacing_at_center
 
     def specific_process_photons(self, photons,
                                  intersect, interpoos, intercoos):
