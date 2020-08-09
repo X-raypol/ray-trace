@@ -16,8 +16,7 @@ from .gratings import GratingGrid
 from .mlmirrors import LGMLMirror
 from .tolerances import MirrorMover
 
-from . import redsoxbase, inputpath, xyz2zxy
-
+from . import inputpath, xyz2zxy
 
 def euler2aff(*args, **kwargs):
     mat = euler2mat(*args, **kwargs)
@@ -40,24 +39,27 @@ conf = {'aper_z': 2900.,
         'blazeang': 0.8 * u.degree,
         'gratingzoom': [0.25, 15, 5],
         'gratingframe': [0, 1.5, .5],
+        'grating_z_bracket': [1e3, 2.5e3],
         'd': 2e-4,
         'rotchan': {'1': np.eye(4),
                     '2': euler2aff(np.pi * 2 / 3, 0, 0, 'szyz'),
                     '3': euler2aff(-np.pi * 2 / 3, 0, 0, 'szyz')},
         'grat_id_offset': {'1': 1000, '2': 2000, '3': 3000},
         'beta_lim': np.deg2rad([3.5, 5.05]),
-        'ML' = {'mirrorfile': 'ml_refl_2017_withCrSc_width.txt',
-                'zoom': [0.25, 15., 5.],
-                'pos': [44.55, 0, 0],
+        'grating_ypos': [50, 220],
+        'ML': {'mirrorfile': 'ml_refl_2017_withCrSc_width.txt',
+               'zoom': [0.25, 15., 5.],
+               'pos': [44.55, 0, 0],
     # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
     # where x is measured from the short wavelength end of the mirror.
     # In marxs x is measured from the center, so we add 15 mm (the half-length.)
-                'lateral_gradient': 0.88,  # Ang/mm
-                'spacing_at_center': 0.88 * (0 + 15) + 26,
-                },
+               'lateral_gradient': 8.8e-8,  # Ang/mm converted to unitless
+               'spacing_at_center': (0.88 * (0 + 15) + 26) * 1E-7,
+        },
         'pixsize': 0.016,
         'detsize0': [408, 1608],
         'detsize123': [1632, 1608],
+        'det1pos': [44.55, 25, 0],
         'bend': 1664,
         }
 
@@ -137,7 +139,7 @@ class CATGratings(simulator.Sequence):
         # All all top sectors first so that a ray passing though overlapping top and
         # bottom sectors correctly passes through the top grating first.
         for chan in channels:
-            gg = GratingGrid(channel=chan, conf=conf, y_in=[-220, -50],
+            gg = GratingGrid(channel=chan, conf=conf, y_in=[-conf['grating_ypos'][1], -conf['grating_ypos'][0]],
                              id_num_offset=conf['grat_id_offset'][chan]
                              # color_index=self.color_index[chan]
             )
@@ -146,7 +148,7 @@ class CATGratings(simulator.Sequence):
             elements.append(gg)
         # then add bottom sectors as requested
         for chan in channels:
-            gg = GratingGrid(channel=chan, conf=conf, y_in=[50, 220],
+            gg = GratingGrid(channel=chan, conf=conf, y_in=conf['grating_ypos'],
                              id_num_offset=conf['grat_id_offset'][chan] + 500
                              # color_index=self.color_index[chan]
             )
@@ -163,19 +165,23 @@ class MLMirrors(simulator.Parallel):
 
     def __init__(self, channels, conf):
         c = conf['ML']
-        lgmlpos = [transforms3d.affines.compose(c['pos'],
+        lgmlpos = []
+        lgmlpos1 = transforms3d.affines.compose(c['pos'],
                                                 np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
                                                        xyz2zxy[:3, :3]),
-                                                c['zoom'])]
+                                                c['zoom'])
+        if '1' in channels:
+            lgmlpos.append(lgmlpos1)
         for chan in '23':
-            lgmlpos.append(np.dot(conf['rotchan'][chan], lgmlpos[0]))
+            if chan in channels:
+                lgmlpos.append(np.dot(conf['rotchan'][chan], lgmlpos1))
 
         datafile = os.path.join(inputpath, c['mirrorfile'])
         super(MLMirrors, self).__init__(elem_class=self.elem_class,
                                         elem_pos=lgmlpos,
                                         elem_args={'datafile': datafile,
                                                    'lateral_gradient': c['lateral_gradient'],
-                                                   'spacing_at_center': c['spacinf_at_center']},
+                                                   'spacing_at_center': c['spacing_at_center']},
                                         id_num_offset=1,
                                         id_col='LGML')
 
@@ -184,7 +190,7 @@ class Detectors(simulator.Sequence):
     elem_class = optics.FlatDetector
 
     def filterqe(self):
-        ccdqe = Table.read(os.path.join(inputpath, 'ccd097.txt'),
+        ccdqe = Table.read(os.path.join(inputpath, 'xgs_bi_ccdqe.dat'),
                            format='ascii.no_header', comment='!',
                            names=['energy', 'qe', 'filtertrans', 'temp'])
         ccdqe['energy'] = 1e-3 * ccdqe['energy']  # ev to keV
@@ -206,7 +212,7 @@ class Detectors(simulator.Sequence):
                                                    xyz2zxy[:3, :3],
                                                    detzoom0)]
         #Position of the detector for channel 1
-        det_channel = transforms3d.affines.compose([44.55, 25, 0],
+        det_channel = transforms3d.affines.compose(conf['det1pos'],
                                                    np.dot(flip, rot),
                                                    detzoom)
         for chan in channels:

@@ -76,11 +76,11 @@ class ColoringGrating(CATL1L2Stack):
 
 class GratingGrid(ParallelCalculated, OpticalElement):
     id_col = 'facet'
-    G = 8.8e-8   # 0.88 Ang / mm
     elem_class = CATL1L2Stack
     order_selector = globalorderselector
 
     def __init__(self, channel, conf, y_in, **kwargs):
+        self.G = conf['ML']['lateral_gradient']
         kwargs['pos_spec'] = self.elempos
         if 'normal_spec' not in kwargs.keys():
             kwargs['normal_spec'] = np.array([0., 0., 0., 1.])
@@ -102,6 +102,8 @@ class GratingGrid(ParallelCalculated, OpticalElement):
                           'r_in': conf['aper_rin'],
                           'r_out': conf['mirr_rout'],
         }
+        self.z_bracket = conf['grating_z_bracket']
+        self.z_guess = sum(self.z_bracket) / 2
         super().__init__(**kwargs)
         self.elem_pos = [np.dot(conf['rotchan'][channel], e) for e in self.elem_pos]
         self.generate_elements()
@@ -116,6 +118,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
 
     @staticmethod
     def cart2sph(x, y, z):
+        '''convert cartesian to spherical coordiantes'''
         hyz = np.hypot(y, z)
         beta = np.arctan2(y, z)
         gamma = np.arctan2(hyz, x)
@@ -126,7 +129,7 @@ class GratingGrid(ParallelCalculated, OpticalElement):
         def func(z):
             rg, gamma, beta = self.cart2sph(x, y, z)
             return rg - self.elem_rg(gamma, beta)
-        sol = optimize.root_scalar(func, bracket=[1e3, 2.5e3], x0=1.5e3)
+        sol = optimize.root_scalar(func, bracket=self.z_bracket, x0=self.z_guess)
         if not sol.converged:
             warn(f'Calculating z position for {x}{y} failed because: {sol.flag}')
         return sol.root

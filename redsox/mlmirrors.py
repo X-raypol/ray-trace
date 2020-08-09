@@ -73,6 +73,8 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         self.spacing_at_center = spacing_at_center
         data = Table.read(datafile, format='ascii.no_header', data_start=1,
                           names=['wave', 'R', 'M', 'width'])
+        # Table is in Ang, but I use mm as unit of length
+        data['wave'] = data['wave'] * 1e-7
         self.rs = interpolate.RectBivariateSpline(refl_theory['angle'],
                                                   refl_theory['period_lab'],
                                                   refl_theory['rs'], ky=2)
