@@ -23,19 +23,14 @@ def euler2aff(*args, **kwargs):
     return transforms3d.affines.compose(np.zeros(3), mat, np.ones(3))
 
 
-def FWHMarcs2sigrad(x):
-    '''Convert FWHM in arcsec to Gaussian sigma in rad'''
-    return x / 2.3545 / 3600 / 180. * np.pi
-
-
 conf = {'aper_z': 2900.,
         'aper_rin': 165.,
         'aper_rout': 223.,
         'mirr_rout': 228,
         'mirr_length': 300,
         'f': 2500,
-        'inscat': FWHMarcs2sigrad(30.),
-        'perpscat': FWHMarcs2sigrad(10.),
+        'inscat': 30. / 2.3545 * u.arcsec,
+        'perpscat': 10. / 2.3435 * u.arcsec,
         'blazeang': 0.8 * u.degree,
         'gratingzoom': [0.25, 15, 5],
         'gratingframe': [0, 1.5, .5],
@@ -131,6 +126,7 @@ class CATGratings(simulator.Sequence):
     colors = 'ryg'
     color_chan = {'1': 'r', '2': 'y', '3': 'g'}
     color_index = {'1': 0, '2': 1, '3': 2}
+    GratingGrid = GratingGrid
 
     def __init__(self, channels, conf, **kwargs):
 
@@ -139,7 +135,7 @@ class CATGratings(simulator.Sequence):
         # All all top sectors first so that a ray passing though overlapping top and
         # bottom sectors correctly passes through the top grating first.
         for chan in channels:
-            gg = GratingGrid(channel=chan, conf=conf, y_in=[-conf['grating_ypos'][1], -conf['grating_ypos'][0]],
+            gg = self.GratingGrid(channel=chan, conf=conf, y_in=[-conf['grating_ypos'][1], -conf['grating_ypos'][0]],
                              id_num_offset=conf['grat_id_offset'][chan]
                              # color_index=self.color_index[chan]
             )
@@ -148,7 +144,7 @@ class CATGratings(simulator.Sequence):
             elements.append(gg)
         # then add bottom sectors as requested
         for chan in channels:
-            gg = GratingGrid(channel=chan, conf=conf, y_in=conf['grating_ypos'],
+            gg = self.GratingGrid(channel=chan, conf=conf, y_in=conf['grating_ypos'],
                              id_num_offset=conf['grat_id_offset'][chan] + 500
                              # color_index=self.color_index[chan]
             )

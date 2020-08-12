@@ -8,11 +8,13 @@ from marxs.source import PointSource, FixedPointing
 from marxs.visualization.mayavi import plot_object, plot_rays
 
 from redsox.redsox import PerfectRedsox, xyz2zxy
+from redsox.gosox import PerfectGosox
 from redsox.mirror import Ageom
 
 %matplotlib
 
-instrum = PerfectRedsox()
+#instrum = PerfectRedsox()
+instrum = PerfectGosox()
 
 fig = mlab.figure()
 mlab.clf()
@@ -65,3 +67,17 @@ for n in 'xyz':
     outtab['rot_' + n].unit = u.degree
 for c in outtab.colnames:
     outtab[c].format = '5.1f'
+
+#### GoSox plots
+# plot of detector images
+
+import matplotlib.pyplot as plt
+fig = plt.figure()
+for i in range(2):
+    ax = fig.add_subplot(2, 1, i+1)
+    ax.set_title('CCD ID: {0}'.format(i))
+    ind = photons['CCD_ID'] == i
+    im = ax.hist2d(photons['detpix_x'][ind], photons['detpix_y'][ind],
+                   weights=photons['probability'][ind], range=[[0,1631], [0, 1607]],
+                   bins=1000)
+    plt.colorbar(im[3], ax=ax)

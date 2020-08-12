@@ -99,7 +99,7 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         width = self.width(wave_nominal)
         gaussians = Gaussian1D(amplitude=amp, mean=1.,
                                stddev=width / 2.355)
-        wave = energy2wave / photons['energy'][intersect] * 1e7
+        wave = energy2wave / photons['energy'][intersect]
 
         out = super(LGMLMirror, self).specific_process_photons(photons,
                                                                intersect,
