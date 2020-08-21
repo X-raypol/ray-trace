@@ -4,8 +4,14 @@ import numpy as np
 from scipy.interpolate import interp1d
 import astropy.units as u
 from astropy.table import Table
+from numpy.core.umath_tests import inner1d
+
 
 from marxs import optics, simulator
+from marxs.math.utils import h2e
+from marxs.math.utils import h2e, e2h, norm_vector
+from marxs.math.polarization import parallel_transport
+
 from transforms3d import affines
 from transforms3d.euler import euler2mat
 
@@ -22,7 +28,10 @@ conf = {'aper_z': 1400.,
         'mirr_length': 100,  # mirrors should run from f to f - 100
                              # right now, plotting is symmetric to f
                              # so make longer
+        'mirr_module_halfwidth': 50,
         'f': 1250,
+        'shell_thick': 0.3,
+        'n_shells': 25,
         'inscat': 13 * u.arcsec,
         'perpscat': 0. * u.arcsec,
         'blazeang': 0.8 * u.degree,
@@ -36,16 +45,13 @@ conf = {'aper_z': 1400.,
         'ML': {'mirrorfile': 'ml_refl_smallsat.txt',
                'zoom': [0.25, 15., 5.],
                'pos': [0, 28, 0],
-    # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
-    # where x is measured from the short wavelength end of the mirror.
-    # In marxs x is measured from the center, so we add 15 mm (the half-length.)
                'lateral_gradient': 1.6e-7,  # Ang/mm, converted to dimensionless
                'spacing_at_center': 1.6e-7 * 28,
         },
         'pixsize': 0.024,
         'detsize': [1024, 1024],
         'det1pos': [15, 28, 0],
-        'bend': 1000,
+        'bend': 800,
         #'bend': False,
         'rotchan': {'1': euler2aff(np.pi / 2, 0, 0, 'szyz')},
         }
@@ -56,6 +62,54 @@ class RectangleAperture(optics.RectangleAperture):
                'opacity': 0.3,
                'outer_factor': 1.5,
                'shape': 'triangulation'}
+
+
+def mirr_shell_table(tel_length, mirr_length, shell_thick, r_out, n_shells):
+
+    r_out = [r_out]
+    a = []
+    f = []
+    r_in = []
+    for i in range(n_shells):
+        a.append(.5 / r_out[-1] * (tel_length / r_out[-1] + np.sqrt((tel_length / r_out[-1])**2 + 1)))
+        f.append(0.25 / a[-1])
+        r_in.append(np.sqrt(r_out[-1]**2 - mirr_length / a[-1]))
+        r_out.append(r_in[-1] - 2 * shell_thick)
+    return Table({'shell': np.arange(n_shells) + 1,  # + 1 to start at 1, not 0
+                  'r_out': r_out[:-1], 'a': a, 'f': f, 'r_in': r_in})
+
+
+class GoLens(optics.PerfectLens):
+
+    def __init__(self, conf, **kwargs):
+        self.shells = mirr_shell_table(conf['f'], conf['mirr_length'],
+                                       conf['shell_thick'], conf['mirr_rout'],
+                                       conf['n_shells'])
+        super().__init__(**kwargs)
+
+    def reflectivity(self, energy, angle):
+        return 1 - 0.32  * np.rad2deg(angle) / 4.
+
+    def specific_process_photons(self, photons, intersect, interpos, intercoos):
+        # A ray through the center is not broken.
+        # So, find out where a central ray would go.
+        focuspoints = h2e(self.geometry['center']) + self.focallength * norm_vector(h2e(photons['dir'][intersect]))
+        dir = e2h(focuspoints - h2e(interpos[intersect]), 0)
+        pol = parallel_transport(photons['dir'].data[intersect, :], dir,
+                                 photons['polarization'].data[intersect, :])
+        # Single reflection, so get change in angle
+        refl_angle = np.arccos(inner1d(norm_vector(dir),
+                                       photons['dir'].data[intersect, :]))
+        refl = self.reflectivity(photons['energy'][intersect], refl_angle / 2)
+        r = np.sqrt(intercoos[intersect, 0]**2 + intercoos[intersect, 1]**2)
+        shell = np.zeros(intersect.sum())
+        for s in self.shells:
+            ind = (s['r_in'] < r) & (r < s['r_out'])
+            shell[ind] = s['shell']
+        refl[shell < 1] = 0
+        return {'dir': dir, 'polarization': pol, 'probability': refl,
+                'refl_ang': refl_angle, 'shell': shell}
+
 
 
 class SimpleMirror(optics.FlatStack):
@@ -76,23 +130,28 @@ class SimpleMirror(optics.FlatStack):
 
     def __init__(self, conf):
         refl = self.refl()
-        kwords = [{'focallength': conf['f']},
+        kwords = [{'conf': conf, 'focallength': conf['f']},
                   {'inplanescatter': conf['inscat'],
                    'perpplanescatter': conf['perpscat']},
-                  {'filterfunc': interp1d(refl['energy'], refl['refl']),
-                   'name': 'double Ni reflectivity'},
                   {'filterfunc': lambda x: np.ones_like(x) * self.spider_fraction,
                    'name': 'support spider'}]
-        super(SimpleMirror, self).__init__(orientation=xyz2zxy[:3, :3],
-                                           position=[0, 0, conf['f']],
-                                           zoom=[conf['mirr_length'],
-                                                 conf['mirr_rout'],
-                                                 conf['mirr_rout']],
-                                           elements=[optics.PerfectLens,
-                                                     optics.RadialMirrorScatter,
-                                                     optics.EnergyFilter,
-                                                     optics.EnergyFilter],
-                                           keywords=kwords)
+        super().__init__(orientation=xyz2zxy[:3, :3],
+                         position=[0, 0, conf['f']],
+                         zoom=[conf['mirr_length'],
+                               conf['mirr_rout'],
+                               conf['mirr_module_halfwidth']],
+                         elements=[GoLens,
+                                   optics.RadialMirrorScatter,
+                                   optics.EnergyFilter],
+                         keywords=kwords)
+
+
+def outsidemirror(photons):
+    '''Remove photons that do not hit the active area of the mirror.
+    '''
+    photons['probability'][~np.isfinite(photons['shell'])] = 0.
+    return photons
+
 
 
 class GoGrid(GratingGrid):
@@ -134,15 +193,18 @@ class GoGratings(CATGratings):
 
 
 class Detectors(simulator.Parallel):
-    def filterqe(self):
-        ccdqe = Table.read(os.path.join(inputpath, 'xgs_bi_ccdqe.dat'),
-                           format='ascii.no_header', comment='!',
-                           names=['energy', 'qe', 'filtertrans', 'temp'])
-        ccdqe['energy'] = 1e-3 * ccdqe['energy']  # ev to keV
-        return ccdqe
 
     def __init__(self, conf):
-        ccdqe = self.filterqe()
+        al = Table.read('../inputdata/aluminum_transmission.txt',
+                        format='ascii.no_header',
+                        data_start=2, names=['energy', 'transmission'])
+        poly = Table.read('../inputdata/polyimide_transmission.txt',
+                          format='ascii.no_header',
+                          data_start=2, names=['energy', 'transmission'])
+        qe = Table.read('../inputdata/qe.csv', format='ascii.ecsv')
+        al['energy'] = 1e-3 * al['energy']  # eV to keV
+        poly['energy'] = 1e-3 * poly['energy']  # ev to keV
+
 
         detkwargs = {'pixsize': conf['pixsize']}
         detzoom = np.array([1, conf['pixsize'] * conf['detsize'][0] / 2,
@@ -157,13 +219,17 @@ class Detectors(simulator.Parallel):
         ]
         ccd_args = {'elements': (optics.FlatDetector,
                                  optics.EnergyFilter,
+                                 optics.EnergyFilter,
                                  optics.EnergyFilter),
                     'keywords': (detkwargs,
-                                 {'filterfunc': interp1d(ccdqe['energy'],
-                                                         ccdqe['filtertrans']),
-                                  'name': 'optical blocking filter'},
-                                 {'filterfunc': interp1d(ccdqe['energy'],
-                                                         ccdqe['qe']),
+                                 {'filterfunc': interp1d(al['energy'],
+                                                         al['transmission']),
+                                  'name': 'aluminium filter'},
+                                 {'filterfunc': interp1d(poly['energy'],
+                                                         poly['transmission']),
+                                  'name': 'polyamide filter'},
+                                 {'filterfunc': interp1d(qe['energy'],
+                                                         qe['qe']),
                                   'name': 'CCD QE'},
                     ),
         }
@@ -216,6 +282,7 @@ class PerfectGosox(simulator.Sequence):
     def __init__(self, conf=conf, **kwargs):
         elem = [self.init_aper(conf),
                 SimpleMirror(conf),
+                outsidemirror,
                 GoGratings(conf),
                 self.init_ml(conf),
                 Detectors(conf),
