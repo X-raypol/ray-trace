@@ -19,28 +19,6 @@ from marxs import energy2wave
 from marxs.math.utils import norm_vector
 
 
-refl_theory = {'period': np.array([24., 35., 53]),
-               'lambda45': np.array([29.45, 48.80, 73.20]),
-               'angle': np.deg2rad([41., 43., 45, 47, 49]),
-               'rp': np.array([[7.40e-04, 5.30e-03, 9.70e-03],
-                               [1.70e-04, 1.04e-03, 1.60e-03],
-                               [7.00e-06, 1.60e-04, 1.30e-03],
-                               [3.34e-04, 3.90e-03, 1.70e-02],
-                               [1.26e-03, 1.45e-02, 6.20e-02]]),
-               'rs': np.array([[0.0447, 0.295, 0.418],
-                               [0.0472, 0.309, 0.464],
-                               [0.0503, 0.322, 0.515],
-                               [0.0537, 0.344, 0.571],
-                               [0.0577, 0.378, 0.632]])
-               }
-# The predicted Bragg peak lambda at 45 deg differs from the simple
-# lambda = 2 D cos(45).
-# So we don't use the period from the theoretical data, but get the D that
-# we would expect for the given lambda, since that is the quantity we use in
-# the lab when we calibrate this stuff.
-refl_theory['period_lab'] = refl_theory['lambda45'] / np.cos(np.pi / 4.) / 2
-
-
 class LGMLMirror(optics.FlatBrewsterMirror):
     '''
     Parameters
@@ -68,7 +46,8 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         scale = 2. / (rs + rp)
         return rs * scale, rp * scale
 
-    def __init__(self, datafile, lateral_gradient, spacing_at_center, **kwargs):
+    def __init__(self, datafile, lateral_gradient, spacing_at_center,
+                 refl_theory, **kwargs):
         self.lateral_gradient = lateral_gradient
         self.spacing_at_center = spacing_at_center
         data = Table.read(datafile, format='ascii.no_header', data_start=1,

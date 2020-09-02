@@ -27,7 +27,7 @@ def fractional_aeff(photons, filterfunc=None):
     return prob
 
 
-def calculate_modulation(photons):
+def calculate_modulation(photons, ccds=[0, 1, 2, 3]):
     '''Calculate modulation factor on each CCD
 
     Parameters
@@ -36,6 +36,8 @@ def calculate_modulation(photons):
         Photon event list. The event list should be split exactly,
         where the top half contains photons of one polarization direction
         and the bottom half photons of the perpendicular direction.
+    ccds : list
+        id numbers of all CCDs to be analyzed by this function.
 
     Returns
     -------
@@ -49,7 +51,7 @@ def calculate_modulation(photons):
     indhalf[n:] = False
     modulation = np.zeros(4, dtype=float)
 
-    for i in [0, 1, 2, 3]:
+    for i in ccds:
         indccd = (photons['CCD_ID'] == i)
         pol1 = photons['probability'][indhalf & indccd].sum()
         pol2 = photons['probability'][~indhalf & indccd].sum()

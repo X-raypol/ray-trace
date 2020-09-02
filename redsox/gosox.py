@@ -49,12 +49,42 @@ conf = {'aper_z': 1400.,
                'spacing_at_center': 1.6e-7 * 28,
         },
         'pixsize': 0.024,
-        'detsize': [1024, 1024],
+        'detsize': [2048, 1039],
         'det1pos': [15, 28, 0],
         'bend': 800,
         #'bend': False,
         'rotchan': {'1': euler2aff(np.pi / 2, 0, 0, 'szyz')},
         }
+
+
+refl_theory = {'period': np.array([21., 35., 53]),
+               'lambda45': np.array([29.45, 48.80, 73.20]),
+               'angle': np.deg2rad([35., 38., 41., 43., 45, 47, 49, 52., 55.]),
+               'rp': np.array([[1.96e-02, 1.48e-02, 9.91e-03],
+                               [1.25e-02, 7.60e-03, 4.73e-03],
+                               [7.40e-04, 5.30e-03, 9.70e-03],
+                               [1.70e-04, 1.04e-03, 1.60e-03],
+                               [7.00e-06, 1.60e-04, 1.30e-03],
+                               [3.34e-04, 3.90e-03, 1.70e-02],
+                               [1.26e-03, 1.45e-02, 6.20e-02],
+                               [1.58e-03, 1.52e-02, 1.78e-02],
+                               [1.94e-03, 3.40e-02, 2.15e-02]]),
+               'rs': np.array([[0.147,  0.118, 0.0927],
+                               [0.180,  0.124, 0.0957],
+                               [0.0447, 0.295, 0.418],
+                               [0.0472, 0.309, 0.464],
+                               [0.0503, 0.322, 0.515],
+                               [0.0537, 0.344, 0.571],
+                               [0.0577, 0.378, 0.632],
+                               [0.0255, 0.176, 0.1246],
+                               [0.0163, 0.201, 0.1340]])
+               }
+# The predicted Bragg peak lambda at 45 deg differs from the simple
+# lambda = 2 D cos(45).
+# So we don't use the period from the theoretical data, but get the D that
+# we would expect for the given lambda, since that is the quantity we use in
+# the lab when we calibrate this stuff.
+refl_theory['period_lab'] = refl_theory['lambda45'] / np.cos(np.pi / 4.) / 2
 
 
 class RectangleAperture(optics.RectangleAperture):
@@ -211,10 +241,10 @@ class Detectors(simulator.Parallel):
                              conf['pixsize'] * conf['detsize'][1] / 2])
 
         detposlist = [affines.compose(np.zeros(3),
-                                      euler2mat(0, np.pi / 2, 0, 'sxyz'),
+                                      euler2mat(np.pi/2, 0, np.pi / 2, 'sxzy'),
                                       detzoom),
                       affines.compose(conf['det1pos'],
-                                      euler2mat(np.pi / 4, 0, 0, 'sxyz'),
+                                      euler2mat(0, 0, 0, 'sxyz'),
                                       detzoom),
         ]
         ccd_args = {'elements': (optics.FlatDetector,
@@ -272,7 +302,8 @@ class PerfectGosox(simulator.Sequence):
                         zoom=c['zoom'],
                         datafile=datafile,
                         lateral_gradient = c['lateral_gradient'],
-                        spacing_at_center = c['spacing_at_center'])
+                        spacing_at_center = c['spacing_at_center'],
+                        refl_theory=refl_theory)
         return ml
 
     def post_process(self):
