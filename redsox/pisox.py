@@ -22,16 +22,17 @@ from . import inputpath, xyz2zxy
 
 
 conf = {'aper_z': 1400.,
-        'aper_zoom': [1, 55, 75],
+        'aper_zoom': [1, 65, 75],
         'aper_rin': 65,  # mirrors use this number too.
         'mirr_rout': 200,
         'mirr_length': 100,  # mirrors should run from f to f - 100
                              # right now, plotting is symmetric to f
                              # so make longer
-        'mirr_module_halfwidth': 50,
+        'mirr_module_halfwidth': 75,
         'f': 1250,
         'shell_thick': 0.3,
-        'n_shells': 25,
+        'n_shells': 17,
+        'shell_half_opening_angle': np.deg2rad(18.),
         'inscat': 13 * u.arcsec,
         'perpscat': 0. * u.arcsec,
         'blazeang': 0.8 * u.degree,
@@ -49,9 +50,11 @@ conf = {'aper_z': 1400.,
                'spacing_at_center': 1.6e-7 * 28,
         },
         'pixsize': 0.024,
-        'detsize': [2048, 1039],
-        'det1pos': [15, 28, 0],
-        'bend': 800,
+        'detsize': [2048, 1024],
+        'det0pos': [0, -13 , 0], # Shift from zero to avoid overlap of detectors
+        'det1pos': [15, 28 + 7, 0], # Shift from CCD center opposite ML center
+                                     # to avoid overlap of CCDs
+        'bend': 900,
         #'bend': False,
         'rotchan': {'1': euler2aff(np.pi / 2, 0, 0, 'szyz')},
         }
@@ -109,12 +112,13 @@ def mirr_shell_table(tel_length, mirr_length, shell_thick, r_out, n_shells):
                   'r_out': r_out[:-1], 'a': a, 'f': f, 'r_in': r_in})
 
 
-class GoLens(optics.PerfectLens):
+class PiLens(optics.PerfectLens):
 
     def __init__(self, conf, **kwargs):
         self.shells = mirr_shell_table(conf['f'], conf['mirr_length'],
                                        conf['shell_thick'], conf['mirr_rout'],
                                        conf['n_shells'])
+        self.conf = conf
         super().__init__(**kwargs)
 
     def reflectivity(self, energy, angle):
@@ -132,11 +136,15 @@ class GoLens(optics.PerfectLens):
                                        photons['dir'].data[intersect, :]))
         refl = self.reflectivity(photons['energy'][intersect], refl_angle / 2)
         r = np.sqrt(intercoos[intersect, 0]**2 + intercoos[intersect, 1]**2)
+        phi = np.arctan(np.abs(intercoos[intersect, 1] /
+                               intercoos[intersect, 0]))
         shell = np.zeros(intersect.sum())
         for s in self.shells:
-            ind = (s['r_in'] < r) & (r < s['r_out'])
+            ind = (s['r_in'] < r) & (r < s['r_out']) & (phi < self.conf['shell_half_opening_angle'])
             shell[ind] = s['shell']
         refl[shell < 1] = 0
+        #import pbd
+        #pdb.set_trace()
         return {'dir': dir, 'polarization': pol, 'probability': refl,
                 'refl_ang': refl_angle, 'shell': shell}
 
@@ -170,7 +178,7 @@ class SimpleMirror(optics.FlatStack):
                          zoom=[conf['mirr_length'],
                                conf['mirr_rout'],
                                conf['mirr_module_halfwidth']],
-                         elements=[GoLens,
+                         elements=[PiLens,
                                    optics.RadialMirrorScatter,
                                    optics.EnergyFilter],
                          keywords=kwords)
@@ -184,17 +192,30 @@ def outsidemirror(photons):
 
 
 
-class GoGrid(GratingGrid):
+class PiGrid(GratingGrid):
 
     def elempos(self):
         '''This elempos makes a regular grid, very similar to Mark Egan's design.'''
         dx = 2 * self.conf['gratingzoom'][1] + 2 * self.conf['gratingframe'][1]
         dy = 2 * self.conf['gratingzoom'][2] + self.conf['gratingframe'][2]
-        x = np.array([-dx, 0, dx])
-        y = np.arange(self.y_in[0], self.y_in[1], dy)
-        mx, my = np.meshgrid(x, y)
-        mx = mx.flatten()
-        my = my.flatten()
+        #x = np.arange(-2, 2.1) * dx
+        y_pos = np.arange(self.y_in[0], self.y_in[1], dy)
+        mx = []
+        my = []
+        for y in y_pos:
+            # max x value that a ray can have at this y
+            max_x = (np.abs(y) + 0.5 * self.conf['gratingzoom'][2]) * \
+                np.tan(self.conf['shell_half_opening_angle'])
+            # number of gratings in x direction needed to cover that
+            # one grating at the center covers -.5 to .5
+            n_x = max_x / dx
+            mx.extend(np.arange(-np.round(n_x), np.round(n_x) + 0.1) * dx)
+            my.extend([y] * int(2 * np.round(n_x) + 1))
+        mx = np.array(mx)
+        my = np.array(my)
+        #mx, my = np.meshgrid(x, y)
+        #mx = mx.flatten()
+        #my = my.flatten()
         # Get z value
         # This class does not know if the ML mirror is tipped by +45 deg
         # or -45 deg. Yet, for -45 the stepping of the gratings should be
@@ -215,10 +236,11 @@ class GoGrid(GratingGrid):
     #        bend_gratings(self.elements, r_elem=self.bend)
 
 
-class GoGratings(CATGratings):
-    GratingGrid = GoGrid
+class PiGratings(CATGratings):
+    GratingGrid = PiGrid
 
     def __init__(self, conf, **kwargs):
+        self.conf = conf
         super().__init__('1', conf, **kwargs)
 
 
@@ -231,7 +253,14 @@ class Detectors(simulator.Parallel):
         poly = Table.read('../inputdata/polyimide_transmission.txt',
                           format='ascii.no_header',
                           data_start=2, names=['energy', 'transmission'])
-        qe = Table.read('../inputdata/qe.csv', format='ascii.ecsv')
+        #qe = Table.read('../inputdata/qe.csv', format='ascii.ecsv')
+        qe = Table.read('../inputdata/xgs_bi_ccdqe.dat',
+                        format='ascii.no_header',
+                        data_start=4,
+                        names=['energy', 'qe', 'temp1', 'temp2'])
+        qe['energy'] = 1e-3 * qe['energy']  # eV to keV
+
+
         al['energy'] = 1e-3 * al['energy']  # eV to keV
         poly['energy'] = 1e-3 * poly['energy']  # ev to keV
 
@@ -240,8 +269,8 @@ class Detectors(simulator.Parallel):
         detzoom = np.array([1, conf['pixsize'] * conf['detsize'][0] / 2,
                              conf['pixsize'] * conf['detsize'][1] / 2])
 
-        detposlist = [affines.compose(np.zeros(3),
-                                      euler2mat(np.pi/2, 0, np.pi / 2, 'sxzy'),
+        detposlist = [affines.compose(conf['det0pos'],
+                                      euler2mat(0, np.pi/2, 0, 'sxyz'),
                                       detzoom),
                       affines.compose(conf['det1pos'],
                                       euler2mat(0, 0, 0, 'sxyz'),
@@ -278,7 +307,22 @@ class Detectors(simulator.Parallel):
         self.elements[1].display = self.disp
 
 
-class PerfectGosox(simulator.Sequence):
+def effective_baffle(photons):
+    '''Only photons that hit the ML first are allowed onto the CCD 1
+
+    Until the geometry of the baffle is specificed, I'm just running
+    this with an "effective baffle" that filters out all non-wanted
+    photons using columns that encapsulate the history of the photon.
+
+    Thus should eventually be replaced by a proper geometric baffle.
+    '''
+    ind = photons['CCD_ID'] == 1
+    ind2 = np.isfinite(photons['mlwave_nominal'])
+    photons['probability'][ind & ~ind2] = 0.
+    return photons
+
+
+class PerfectPisox(simulator.Sequence):
     '''Intialization that onle a few lines is done here.
     When it gets longer it gets split out into a separate class.
     '''
@@ -314,9 +358,10 @@ class PerfectGosox(simulator.Sequence):
         elem = [self.init_aper(conf),
                 SimpleMirror(conf),
                 outsidemirror,
-                GoGratings(conf),
+                PiGratings(conf),
                 self.init_ml(conf),
                 Detectors(conf),
+                effective_baffle,
         ]
         super().__init__(elements=elem, postprocess_steps=self.post_process(),
                          **kwargs)
