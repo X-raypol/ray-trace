@@ -26,7 +26,7 @@ def offsetpoint(element, position_angle, separation):
 
 def plot_wiggle(tab, par, parlist, ax, axt=None,
                 modfac='mod_mean', Aeff_col='Aeff_channel',
-                axes_facecolor='w', MDP=False):
+                axes_facecolor='w', plot_type=None):
     '''Plotting function for overview plot wiggeling 1 dof at the time.
 
     For parameters starting with "d" (e.g. "dx", "dy", "dz"), the plot axes
@@ -59,7 +59,7 @@ def plot_wiggle(tab, par, parlist, ax, axt=None,
     t = select_1dof_changed(tab, par, parlist)
     t.sort(par)
     t_wave = t.group_by('wave')
-    if (axt is None) and not MDP:
+    if (axt is None) and (plot_type is None):
         axt = ax.twinx()
 
     for key, g in zip(t_wave.groups.keys, t_wave.groups):
@@ -70,14 +70,24 @@ def plot_wiggle(tab, par, parlist, ax, axt=None,
         else:
             raise ValueError("Don't know how to plot {}. Parameter names should start with 'd' for shifts and 'r' for rotations.".format(par))
 
-        if MDP:
+        if plot_type == 'MDP':
             ax.plot(x, np.abs(g['modulation'][:, 1]) * np.sqrt(g[Aeff_col]),
                     label='{:3.1f} $\AA$'.format(key[0]), lw=2 )
+        elif plot_type == 'aeff':
+            ax.plot(x, g[Aeff_col], label='{:2.0f} $\AA$'.format(key[0]), lw=2)
+        elif plot_type == 'modulation':
+             ax.plot(x, np.abs(g['modulation'][:, 1]), label='{:3.1f} $\AA$'.format(key[0]), lw=1.5)
         else:
             ax.plot(x, np.abs(g['modulation'][:, 1]), label='{:3.1f} $\AA$'.format(key[0]), lw=1.5)
             axt.plot(x, g[Aeff_col], ':', label='{:2.0f} $\AA$'.format(key[0]), lw=2)
-    if MDP:
+    if plot_type == 'MDP':
         ax.set_ylabel('Figure of merrit')
+        axlist = [ax]
+    elif plot_type == 'aeff':
+        ax.set_ylabel('$A_{eff}$ [cm$^2$] per channel')
+        axlist = [ax]
+    elif plot_type == 'modulation':
+        ax.set_ylabel('Modulation factor')
         axlist = [ax]
     else:
         ax.set_ylabel('Modulation factor (solid lines)')
