@@ -42,7 +42,7 @@ conf = {'aper_z': 2900.,
         'grat_id_offset': {'1': 1000, '2': 2000, '3': 3000},
         'beta_lim': np.deg2rad([3.5, 5.05]),
         'grating_ypos': [50, 220],
-        'ML': {'mirrorfile': 'ml_refl_2017_withCrSc_width.txt',
+        'ML': {'mirrorfile': 'ml_refl_smallsat.txt',
                'zoom': [0.25, 15., 5.],
                'pos': [44.55, 0, 0],
     # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
@@ -51,9 +51,9 @@ conf = {'aper_z': 2900.,
                'lateral_gradient': 8.8e-8,  # Ang/mm converted to unitless
                'spacing_at_center': (0.88 * (0 + 15) + 26) * 1E-7,
         },
-        'pixsize': 0.016,
-        'detsize0': [408, 1608],
-        'detsize123': [1632, 1608],
+        'pixsize': 0.024,
+        'detsize0': [2048, 1024],
+        'detsize123': [2048, 1024],
         'det1pos': [44.55, 25, 0],
         'bend': 1664,
         }
@@ -209,14 +209,22 @@ class Detectors(simulator.Sequence):
     elem_class = optics.FlatDetector
 
     def filterqe(self):
-        ccdqe = Table.read(os.path.join(inputpath, 'xgs_bi_ccdqe.dat'),
-                           format='ascii.no_header', comment='!',
-                           names=['energy', 'qe', 'filtertrans', 'temp'])
-        ccdqe['energy'] = 1e-3 * ccdqe['energy']  # ev to keV
-        return ccdqe
+        al = Table.read('../inputdata/aluminium_transmission_50nm.txt',
+                        format='ascii.no_header',
+                        data_start=2, names=['energy', 'transmission'])
+        qe = Table.read('../inputdata/xgs_bi_ccdqe.dat',
+                        format='ascii.no_header',
+                        data_start=4,
+                        names=['energy', 'qe', 'temp1', 'temp2'])
+        qe['energy'] = 1e-3 * qe['energy']  # eV to keV
+
+
+        al['energy'] = 1e-3 * al['energy']  # eV to keV
+
+        return al, qe
 
     def __init__(self, channels, conf):
-        ccdqe = self.filterqe()
+        al, qe = self.filterqe()
 
         detkwargs = {'pixsize': conf['pixsize']}
         detzoom0 = np.array([1, conf['pixsize'] * conf['detsize0'][0] / 2,
@@ -224,7 +232,8 @@ class Detectors(simulator.Sequence):
         detzoom = np.array([1, conf['pixsize'] * conf['detsize123'][0] / 2,
                             conf['pixsize'] * conf['detsize123'][1] / 2])
         # rotate by 45 deg
-        rot = transforms3d.euler.euler2mat(np.pi / 4, 0, 0, 'sxyz')
+        rot = transforms3d.euler.euler2mat(0, 0, 0, 'sxyz')
+
         # flip to x-z plane
         flip = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
         detposlist = [transforms3d.affines.compose(np.zeros(3),
@@ -236,21 +245,26 @@ class Detectors(simulator.Sequence):
                                                    detzoom)
         for chan in channels:
             detposlist.append(np.dot(conf['rotchan'][chan], det_channel))
-        ccd123_args = {'elements': (self.elem_class, optics.EnergyFilter),
+        ccd123_args = {'elements': (self.elem_class,
+                                    optics.EnergyFilter,
+                                    optics.EnergyFilter),
                        'keywords': (detkwargs,
-                                    {'filterfunc': interp1d(ccdqe['energy'],
-                                                            ccdqe['qe']),
+                                    {'filterfunc': interp1d(al['energy'],
+                                                            al['transmission']),
+                                     'name': 'aluminium filter'},
+                                    {'filterfunc': interp1d(qe['energy'],
+                                                            qe['qe']),
                                      'name': 'CCD QE'},
-                                ),
-                   }
+                                    ),
+                       }
         ccd0_args = copy.deepcopy(ccd123_args)
         ccd0_args['keywords'][0]['id_num'] = 0
         ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
-        # add optical blocking filter for CCD 0
-        ccd0_args['elements'] += (optics.EnergyFilter, )
-        ccd0_args['keywords'] += ({'filterfunc': interp1d(ccdqe['energy'],
-                                                             ccdqe['filtertrans']),
-                                      'name': 'optical blocking filter'}, )
+#        # add optical blocking filter for CCD 0
+#        ccd0_args['elements'] += (optics.EnergyFilter, )
+#        ccd0_args['keywords'] += ({'filterfunc': interp1d(ccdqe['energy'],
+#                                                             ccdqe['filtertrans']),
+#                                      'name': 'optical blocking filter'}, )
         det0 = optics.FlatStack(pos4d=detposlist[0], **ccd0_args)
         det123 = simulator.Parallel(elem_class=optics.FlatStack,
                                     elem_pos=detposlist[1:],

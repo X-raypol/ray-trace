@@ -247,9 +247,11 @@ class PiGratings(CATGratings):
 class Detectors(simulator.Parallel):
 
     def __init__(self, conf):
-        al = Table.read('../inputdata/aluminum_transmission.txt',
+        # 50 mn directly depositied on CCD + 30 nm on contamination filter
+        al = Table.read('../inputdata/aluminuim_transmission_80nm.txt',
                         format='ascii.no_header',
                         data_start=2, names=['energy', 'transmission'])
+        # 100 nm contamination filter
         poly = Table.read('../inputdata/polyimide_transmission.txt',
                           format='ascii.no_header',
                           data_start=2, names=['energy', 'transmission'])
