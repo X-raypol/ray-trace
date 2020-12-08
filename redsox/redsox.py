@@ -15,6 +15,7 @@ from marxs.missions.mitsnl.catgrating import catsupportbars
 from .gratings import GratingGrid
 from .mlmirrors import LGMLMirror
 from .tolerances import MirrorMover
+from .mirror import MultiShellAperture
 
 from . import inputpath, xyz2zxy
 
@@ -42,7 +43,7 @@ conf = {'aper_z': 2900.,
         'grat_id_offset': {'1': 1000, '2': 2000, '3': 3000},
         'beta_lim': np.deg2rad([3.5, 5.05]),
         'grating_ypos': [50, 220],
-        'ML': {'mirrorfile': 'ml_refl_smallsat.txt',
+        'ML': {'mirrorfile': 'ml_refl_2019_CrScOnly_width.txt',
                'zoom': [0.25, 15., 5.],
                'pos': [44.55, 0, 0],
     # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
@@ -89,10 +90,10 @@ class CircleAperture(optics.CircleAperture):
                'shape': 'triangulation'}
 
     def __init__(self, channels, conf):
-        super(CircleAperture, self).__init__(orientation=xyz2zxy[:3, :3],
-                                             position=[0, 0, conf['aper_z']],
-                                             zoom=[1, conf['aper_rout'], conf['aper_rout']],
-                                             r_inner=conf['aper_rin'])
+        super().__init__(orientation=xyz2zxy[:3, :3],
+                         position=[0, 0, conf['aper_z']],
+                         zoom=[1, conf['aper_rout'], conf['aper_rout']],
+                         r_inner=conf['aper_rin'])
 
 
 class SimpleMirror(optics.FlatStack):
@@ -304,7 +305,7 @@ LGMLMirror.display['color'] = (1., 0., 1.)
 
 class PerfectRedsox(simulator.Sequence):
 
-    aper_class = CircleAperture
+    aper_class = MultiShellAperture
     mirr_class = SimpleMirror
     cat_class = CATGratings
     ml_class = MLMirrors
