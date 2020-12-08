@@ -5,17 +5,14 @@ from astropy.coordinates import SkyCoord
 import marxs
 from marxs.source import PointSource, FixedPointing
 import astropy.table
-import astropy.units as u
 
 import sys
 sys.path.append('..')
 
 from redsox import redsox
-from redsox import inputpath
 from redsox.analysis import fractional_aeff, calculate_modulation
-from run_settings import wave
 
-
+wave = np.arange(25., 75., 1.) * u.Angstrom
 mypointing = FixedPointing(coords=SkyCoord(30, 30., unit='deg'),
                            reference_transform=redsox.xyz2zxy)
 

@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 
 import run_tools
@@ -6,27 +7,33 @@ import astropy.units as u
 
 import sys
 sys.path.append('..')
-from redsox.pisox import PerfectPisox
-
 
 
 wave = np.arange(17., 61., 1.) * u.Angstrom
 
 
-n_photons = 1e5
-outpath = '../run_results/pisox/'
+parser = argparse.ArgumentParser(description='Run ray-tracing to determine effective area and modulation factor')
+parser.add_argument('mission', choices=['redsox', 'pisox'], help='Select mission')
+parser.add_argument('--n_photons', default=100000, type=int, help='Number of photons per simulation (default 100,000')
+args = parser.parse_args()
+
 
 aeff = []
 modulation = []
 
-mission = PerfectPisox()
+if args.mission == 'pisox':
+    from redsox.pisox import PerfectPisox
+    mission = PerfectPisox()
+elif args.mission == 'redsox':
+    from redsox.redsox import PerfectRedsox
+    mission = PerfectRedsox()
 
-modulation.append(run_tools.run_modulation(n_photons=n_photons, wave=wave,
+modulation.append(run_tools.run_modulation(n_photons=args.n_photons, wave=wave,
                                            mission=mission))
 
-aeff.append(run_tools.run_aeff(n_photons=n_photons, wave=wave,
+aeff.append(run_tools.run_aeff(n_photons=args.n_photons, wave=wave,
                                mission=mission))
 
-outfixed = Table([aeff, modulation],
-                 names=['Aeff', 'modulation'])
-outfixed.write(outpath + 'pi_aeff_mod.fits', overwrite=True)
+outfixed = Table([[wave.T], aeff, modulation],
+                 names=['wavelength', 'Aeff', 'modulation'])
+outfixed.write(f'../run_results/{args.mission}_aeff_mod.fits', overwrite=True)
