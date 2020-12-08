@@ -55,5 +55,5 @@ def calculate_modulation(photons, ccds=[0, 1, 2, 3]):
         indccd = (photons['CCD_ID'] == i)
         pol1 = photons['probability'][indhalf & indccd].sum()
         pol2 = photons['probability'][~indhalf & indccd].sum()
-        modulation[i] = (pol1 - pol2) / (pol1 + pol2)
+        modulation[i] = np.abs((pol1 - pol2) / (pol1 + pol2))
     return modulation
