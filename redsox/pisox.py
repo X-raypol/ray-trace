@@ -248,7 +248,7 @@ class Detectors(simulator.Parallel):
 
     def __init__(self, conf):
         # 50 mn directly depositied on CCD + 30 nm on contamination filter
-        al = Table.read('../inputdata/aluminuim_transmission_80nm.txt',
+        al = Table.read('../inputdata/aluminium_transmission_80nm.txt',
                         format='ascii.no_header',
                         data_start=2, names=['energy', 'transmission'])
         # 100 nm contamination filter
@@ -367,3 +367,10 @@ class PerfectPisox(simulator.Sequence):
         ]
         super().__init__(elements=elem, postprocess_steps=self.post_process(),
                          **kwargs)
+        # Shift the center of the grating assembly to the
+        # position where the axes intersect the stair
+        grids = self.elements_of_class(PiGrid)
+        shift = np.eye(4)
+        shift[2, 3] = grids[0].z_from_xy(0, 0)
+        for e in grids:
+            e.move_center(shift)

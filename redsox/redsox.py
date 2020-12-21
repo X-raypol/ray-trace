@@ -44,17 +44,19 @@ conf = {'aper_z': 2900.,
         'beta_lim': np.deg2rad([3.5, 5.05]),
         'grating_ypos': [50, 220],
         'ML': {'mirrorfile': 'ml_refl_2019_CrScOnly_width.txt',
-               'zoom': [0.25, 15., 5.],
+               'zoom': [0.25, 25., 5.],
                'pos': [44.55, 0, 0],
     # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
     # where x is measured from the short wavelength end of the mirror.
-    # In marxs x is measured from the center, so we add 15 mm (the half-length.)
+    # In marxs x is measured from the center, and the center is
+    # 44.55 from the focal point
                'lateral_gradient': 8.8e-8,  # Ang/mm converted to unitless
-               'spacing_at_center': (0.88 * (0 + 15) + 26) * 1E-7,
+               'spacing_at_center': 0.88 * 44.55 * 1E-7,
         },
         'pixsize': 0.024,
         'detsize0': [2048, 1024],
         'detsize123': [2048, 1024],
+        'det0pos': [0, 0, -15],
         'det1pos': [44.55, 25, 0],
         'bend': 1664,
         }
@@ -83,17 +85,17 @@ refl_theory['period_lab'] = refl_theory['lambda45'] / np.cos(np.pi / 4.) / 2
 
 
 # Aperture
-class CircleAperture(optics.CircleAperture):
-    display = {'color': (0.0, 0.75, 0.75),
-               'opacity': 0.3,
-               'outer_factor': 1.5,
-               'shape': 'triangulation'}
+# class CircleAperture(optics.CircleAperture):
+#     display = {'color': (0.0, 0.75, 0.75),
+#                'opacity': 0.3,
+#                'outer_factor': 1.5,
+#                'shape': 'triangulation'}
 
-    def __init__(self, channels, conf):
-        super().__init__(orientation=xyz2zxy[:3, :3],
-                         position=[0, 0, conf['aper_z']],
-                         zoom=[1, conf['aper_rout'], conf['aper_rout']],
-                         r_inner=conf['aper_rin'])
+#     def __init__(self, channels, conf):
+#         super().__init__(orientation=xyz2zxy[:3, :3],
+#                          position=[0, 0, conf['aper_z']],
+#                          zoom=[1, conf['aper_rout'], conf['aper_rout']],
+#                          r_inner=conf['aper_rin'])
 
 
 class SimpleMirror(optics.FlatStack):
@@ -206,21 +208,23 @@ class MLMirrors(simulator.Parallel):
                                         id_col='LGML')
 
 
-class Detectors(simulator.Sequence):
+class Detectors(simulator.Parallel):
     elem_class = optics.FlatDetector
 
     def filterqe(self):
-        al = Table.read('../inputdata/aluminium_transmission_50nm.txt',
-                        format='ascii.no_header',
-                        data_start=2, names=['energy', 'transmission'])
+        #al = Table.read('../inputdata/aluminium_transmission_50nm.txt',
+        #                format='ascii.no_header',
+        #                data_start=2, names=['energy', 'transmission'])
+
+        # Want to keep function signature intact
+        al = None
+
         qe = Table.read('../inputdata/xgs_bi_ccdqe.dat',
                         format='ascii.no_header',
                         data_start=4,
                         names=['energy', 'qe', 'temp1', 'temp2'])
         qe['energy'] = 1e-3 * qe['energy']  # eV to keV
-
-
-        al['energy'] = 1e-3 * al['energy']  # eV to keV
+        #al['energy'] = 1e-3 * al['energy']  # eV to keV
 
         return al, qe
 
@@ -237,7 +241,8 @@ class Detectors(simulator.Sequence):
 
         # flip to x-z plane
         flip = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
-        detposlist = [transforms3d.affines.compose(np.zeros(3),
+        # start with position of CCD 0
+        detposlist = [transforms3d.affines.compose(conf['det0pos'],
                                                    xyz2zxy[:3, :3],
                                                    detzoom0)]
         #Position of the detector for channel 1
@@ -246,34 +251,25 @@ class Detectors(simulator.Sequence):
                                                    detzoom)
         for chan in channels:
             detposlist.append(np.dot(conf['rotchan'][chan], det_channel))
-        ccd123_args = {'elements': (self.elem_class,
-                                    optics.EnergyFilter,
-                                    optics.EnergyFilter),
-                       'keywords': (detkwargs,
-                                    {'filterfunc': interp1d(al['energy'],
-                                                            al['transmission']),
-                                     'name': 'aluminium filter'},
-                                    {'filterfunc': interp1d(qe['energy'],
-                                                            qe['qe']),
-                                     'name': 'CCD QE'},
-                                    ),
-                       }
-        ccd0_args = copy.deepcopy(ccd123_args)
-        ccd0_args['keywords'][0]['id_num'] = 0
-        ccd0_args['keywords'][0]['id_col'] = 'CCD_ID'
-#        # add optical blocking filter for CCD 0
-#        ccd0_args['elements'] += (optics.EnergyFilter, )
-#        ccd0_args['keywords'] += ({'filterfunc': interp1d(ccdqe['energy'],
-#                                                             ccdqe['filtertrans']),
-#                                      'name': 'optical blocking filter'}, )
-        det0 = optics.FlatStack(pos4d=detposlist[0], **ccd0_args)
-        det123 = simulator.Parallel(elem_class=optics.FlatStack,
-                                    elem_pos=detposlist[1:],
-                                    elem_args=ccd123_args,
-                                    id_num_offset=1,
-                                    id_col='CCD_ID')
+        ccd_args = {'elements': (self.elem_class,
+        #                        optics.EnergyFilter,
+                                 optics.EnergyFilter),
+                    'keywords': (detkwargs,
+        #                            {'filterfunc': interp1d(al['energy'],
+        #                                                    al['transmission']),
+        #                             'name': 'aluminium filter'},
+                                 {'filterfunc': interp1d(qe['energy'],
+                                                         qe['qe']),
+                                  'name': 'CCD QE'},
+                                 ),
+                    }
+        super().__init__(elem_class=optics.FlatStack, elem_pos=detposlist,
+                         elem_args=ccd_args, id_col='CCD_ID')
 
-        super(Detectors, self).__init__(elements=[det0, det123])
+        # If CCDs have different filters, then fix that here. E.g. if only
+        # the CCD0 has al layer
+        # for i in range(1,4):
+        #     self.elements[i].elements[3] = lambda photons : photons
         self.set_display()
 
     def set_display(self):
@@ -281,9 +277,10 @@ class Detectors(simulator.Sequence):
         self.disp['color'] = (0., 0., 1.)
         self.disp['box-half'] = '+x'
 
-        self.elements[0].display = self.disp
-        for e in self.elements[1].elements:
-            e.display = self.disp
+        for el in self.elements:
+            el.display = self.disp
+            for e in el.elements:
+                e.display = self.disp
 
 
 class FocalPlaneDet(marxs.optics.FlatDetector):

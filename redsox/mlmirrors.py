@@ -18,6 +18,29 @@ from marxs import optics
 from marxs import energy2wave
 from marxs.math.utils import norm_vector
 
+# Herman gave me the second order table parameterised in the different way
+# than the first order tables.
+# I'll just hardcode it here for now.
+# Also, I'll use a fixed width hardcoded below.
+secondordertab='''
+0.264	0.0080	6.5
+0.295	0.0090	6.0
+0.316	0.0100	5.6
+0.340	0.0115	5.2
+0.353	0.0130	5.0
+0.375	0.0165	4.7
+0.391	0.026	4.5
+0.420	0.0017	4.2
+0.465	0.0013	3.8
+0.490	0.00084	3.6
+0.595	0.00011	2.95
+0.650	9.0e-5	2.7
+0.765	6.8e-5	2.3'''
+
+secord = Table.read(secondordertab, format='ascii.no_header', names=['en', 'R', 'D'])
+secord['D'] = secord['D'] * 1e-6
+secondamp = interpolate.interp1d(secord['D'], secord['R'], fill_value='extrapolate')
+
 
 class LGMLMirror(optics.FlatBrewsterMirror):
     '''
@@ -54,6 +77,8 @@ class LGMLMirror(optics.FlatBrewsterMirror):
                           names=['wave', 'R', 'M', 'width'])
         # Table is in Ang, but I use mm as unit of length
         data['wave'] = data['wave'] * 1e-7
+        # second order
+        # data2 = Table.read
         self.rs = interpolate.RectBivariateSpline(refl_theory['angle'],
                                                   refl_theory['period_lab'],
                                                   refl_theory['rs'], ky=2)
@@ -72,20 +97,26 @@ class LGMLMirror(optics.FlatBrewsterMirror):
                                  intersect, interpoos, intercoos):
         cosang = np.dot(photons['dir'].data[intersect, :],
                         -self.geometry['e_x'])
-        wave_braggpeak = 2 * self.D(intercoos[intersect, 0]) * cosang
-        wave_nominal = 2 * self.D(intercoos[intersect, 0]) * 2**(-0.5)
+        D = self.D(intercoos[intersect, 0])
+        wave_braggpeak = 2 * D * cosang
+        wave_nominal = 2 * D * 2**(-0.5)
         amp = self.amp(wave_nominal)
         width = self.width(wave_nominal)
-        gaussians = Gaussian1D(amplitude=amp, mean=1.,
-                               stddev=width / 2.355)
+        gauss1order = Gaussian1D(amplitude=amp, mean=1.,
+                                 stddev=width / 2.355)
+        # Fixed hard-coded width
+        gauss2order = Gaussian1D(amplitude=secondamp(D), mean=1.,
+                                 stddev=0.02 / 2.355)
         wave = energy2wave / photons['energy'][intersect]
 
         out = super(LGMLMirror, self).specific_process_photons(photons,
                                                                intersect,
                                                                interpoos,
                                                                intercoos)
+        g1 = gauss1order(wave / wave_braggpeak)
+        g2 = gauss2order(wave / (wave_braggpeak / 2))
 
-        return {'probability': gaussians(wave / wave_braggpeak) * out['probability'],
+        return {'probability': (g1 + g2) * out['probability'],
                 'mlwave_nominal': wave_nominal,
                 'mlwave_braggpeak': wave_braggpeak,
                 'mlcosang': cosang,

@@ -18,13 +18,13 @@ mypointing = FixedPointing(coords=SkyCoord(30, 30., unit='deg'),
 
 
 def run_aeff(mission, n_photons=10000, outpath=None,
-             pointing=mypointing, wave=wave):
+             pointing=mypointing, wave=wave, orders=['all']):
     '''
 
     Parameters
     ----------
     n_photons : int
-         Number of photons fir each simulation
+         Number of photons for each simulation
     outpath : string or ``None``.
         Path to an existing directory where ray files will be saved.
         Set to ``None`` if not files shall be written.
@@ -32,7 +32,7 @@ def run_aeff(mission, n_photons=10000, outpath=None,
         Total mission description.``
     '''
     energies = wave.to(u.keV, equivalencies=u.spectral())
-    frac_aeff = np.zeros((len(energies), 4))
+    frac_aeff = np.zeros((len(energies), 4, len(orders)))
 
     for i, e in enumerate(energies):
         print('{0}/{1}'.format(i + 1, len(energies)))
@@ -46,14 +46,19 @@ def run_aeff(mission, n_photons=10000, outpath=None,
             photons.write(os.path.join(outpath,
                                        'aeff{0:05.2f}.fits'.format(wave.value[i])),
                           overwrite=True)
-        frac_aeff[i, :] = fractional_aeff(photons)
+        for j, order in enumerate(orders):
+            if order == 'all':
+                filterfunc = None
+            else:
+                filterfunc = lambda photons: photons['order'] == order
+            frac_aeff[i, :, j] = fractional_aeff(photons, filterfunc=filterfunc)
     return frac_aeff
 
 
 def run_modulation(mission, n_photons=10000, outpath=None,
-                   pointing=mypointing, wave=wave):
+                   pointing=mypointing, wave=wave, orders=['all']):
     energies = wave.to(u.keV, equivalencies=u.spectral())
-    modulation = np.zeros((len(energies), 4))
+    modulation = np.zeros((len(energies), 4, len(orders)))
     for i, e in enumerate(energies):
         print('{0}/{1}'.format(i + 1, len(energies)))
         mysource = PointSource(coords=SkyCoord(30., 30., unit='deg'),
@@ -70,6 +75,11 @@ def run_modulation(mission, n_photons=10000, outpath=None,
             photons.write(os.path.join(outpath,
                                        'merrit{0:05.2f}.fits'.format(wave.value[i])),
                           overwrite=True)
+        for j, order in enumerate(orders):
+            if order == 'all':
+                phot = photons
+            else:
+                phot = photons[photons['order'] == order]
 
-        modulation[i, :] = calculate_modulation(photons)
+            modulation[i, :, j] = calculate_modulation(phot)
     return modulation
