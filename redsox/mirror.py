@@ -1,6 +1,7 @@
-'''Currently, I use a very simple mirror model that is mostly defined in redsox.py itself.
-However, for effective area calculations, I need a scaling factor to scale from the aperture
-used there to the real geometric opening.
+'''Currently, I use a very simple mirror model that is mostly defined
+in redsox.py itself.  However, for effective area calculations, I need
+a scaling factor to scale from the aperture used there to the real
+geometric opening.
 '''
 from copy import deepcopy
 import numpy as np
@@ -33,6 +34,7 @@ Ageom = shells['A'].sum() * u.mm**2
 # Reverse order from inner to outer, because I took the display
 # code below from Lynx that is in that order
 shells.sort('r_out')
+
 
 class MultiShellAperture(optics.MultiAperture):
 

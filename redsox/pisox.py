@@ -8,15 +8,14 @@ from numpy.core.umath_tests import inner1d
 
 
 from marxs import optics, simulator
-from marxs.math.utils import h2e
-from marxs.math.utils import h2e, e2h, norm_vector
+from marxs.math.utils import h2e, e2h, norm_vector, angle_between
 from marxs.math.polarization import parallel_transport
 
 from transforms3d import affines
-from transforms3d.euler import euler2mat
+from transforms3d.euler import euler2mat, mat2euler
 
 from .redsox import CATGratings, euler2aff
-from .gratings import GratingGrid, bend_gratings
+from .gratings import GratingGrid
 from .mlmirrors import LGMLMirror
 from . import inputpath, xyz2zxy
 
@@ -28,7 +27,7 @@ conf = {'aper_z': 1400.,
         'mirr_length': 100,  # mirrors should run from f to f - 100
                              # right now, plotting is symmetric to f
                              # so make longer
-        'mirr_module_halfwidth': 75,
+        'mirr_module_halfwidth': 200,  # make big box for multi-channel version
         'f': 1250,
         'shell_thick': 0.3,
         'n_shells': 17,
@@ -41,23 +40,36 @@ conf = {'aper_z': 1400.,
         'grating_ypos': [50, 200],
         'grating_z_bracket': [500, 1200],
         'd': 2e-4,
-        'grat_id_offset': {'1': 0},
+        'grat_id_offset': {'1': 0,
+                           '2': 1000,
+                           '3': 2000},
         'beta_lim': np.deg2rad([3.5, 5.05]),
         'ML': {'mirrorfile': 'ml_refl_smallsat.txt',
                'zoom': [0.25, 15., 5.],
                'pos': [0, 28, 0],
                'lateral_gradient': 1.6e-7,  # Ang/mm, converted to dimensionless
                'spacing_at_center': 1.6e-7 * 28,
-        },
+               },
         'pixsize': 0.024,
         'detsize': [2048, 1024],
-        'det0pos': [0, -13 , 0], # Shift from zero to avoid overlap of detectors
-        'det1pos': [15, 28 + 7, 0], # Shift from CCD center opposite ML center
+        'det0pos': [0, -13, 0], # Shift from zero to avoid overlap of detectors
+        'det1pos': [15, 28 + 7, 0],  # Shift from CCD center opposite ML center
                                      # to avoid overlap of CCDs
         'bend': 900,
         #'bend': False,
-        'rotchan': {'1': euler2aff(np.pi / 2, 0, 0, 'szyz')},
+        # pisox currently has only one channels, but might as well define all
+        # threr here, so that GoSox can derive from it
+        'rotchan': {'1': euler2aff(np.pi * 0.5, 0, 0, 'szyz'),
+                    '2': euler2aff(np.pi * (0.5 + 2 / 3), 0, 0, 'szyz'),
+                    '3': euler2aff(np.pi * (0.5 - 2 / 3), 0, 0, 'szyz')},
+        'channels': ['1'],
         }
+
+# conf['rotchan'] gives the rotation of the gratings relative to the
+# principal axes. ML mirror and detector are rotated 90 deg with
+# respect to that, so make a matrix here that I can use for that purpose
+affpihalf = np.eye(4)
+affpihalf[:3, :3] = euler2mat(-np.pi / 2, 0, 0, 'szyz')
 
 
 refl_theory = {'period': np.array([21., 35., 53]),
@@ -104,7 +116,9 @@ def mirr_shell_table(tel_length, mirr_length, shell_thick, r_out, n_shells):
     f = []
     r_in = []
     for i in range(n_shells):
-        a.append(.5 / r_out[-1] * (tel_length / r_out[-1] + np.sqrt((tel_length / r_out[-1])**2 + 1)))
+        a.append(.5 / r_out[-1] *
+                 (tel_length / r_out[-1] +
+                  np.sqrt((tel_length / r_out[-1])**2 + 1)))
         f.append(0.25 / a[-1])
         r_in.append(np.sqrt(r_out[-1]**2 - mirr_length / a[-1]))
         r_out.append(r_in[-1] - 2 * shell_thick)
@@ -113,7 +127,14 @@ def mirr_shell_table(tel_length, mirr_length, shell_thick, r_out, n_shells):
 
 
 class PiLens(optics.PerfectLens):
+    '''Approxiation for an effective lens
 
+    The lens wraps around 2 pi. The fact that only a fraction of the circle
+    is actually covered with mirrors is dealt with in
+    `specific_process_photons`. This class is "effective" in the sense that it
+    does not model the 3D structure of the mirror, but approximates them
+    reflection we expect.
+    '''
     def __init__(self, conf, **kwargs):
         self.shells = mirr_shell_table(conf['f'], conf['mirr_length'],
                                        conf['shell_thick'], conf['mirr_rout'],
@@ -122,12 +143,13 @@ class PiLens(optics.PerfectLens):
         super().__init__(**kwargs)
 
     def reflectivity(self, energy, angle):
-        return 1 - 0.32  * np.rad2deg(angle) / 4.
+        return 1 - 0.32 * np.rad2deg(angle) / 4.
 
     def specific_process_photons(self, photons, intersect, interpos, intercoos):
         # A ray through the center is not broken.
         # So, find out where a central ray would go.
-        focuspoints = h2e(self.geometry['center']) + self.focallength * norm_vector(h2e(photons['dir'][intersect]))
+        focuspoints = h2e(self.geometry['center']) + \
+            self.focallength * norm_vector(h2e(photons['dir'][intersect]))
         dir = e2h(focuspoints - h2e(interpos[intersect]), 0)
         pol = parallel_transport(photons['dir'].data[intersect, :], dir,
                                  photons['polarization'].data[intersect, :])
@@ -136,18 +158,25 @@ class PiLens(optics.PerfectLens):
                                        photons['dir'].data[intersect, :]))
         refl = self.reflectivity(photons['energy'][intersect], refl_angle / 2)
         r = np.sqrt(intercoos[intersect, 0]**2 + intercoos[intersect, 1]**2)
-        phi = np.arctan(np.abs(intercoos[intersect, 1] /
-                               intercoos[intersect, 0]))
+        phi = np.arctan2(intercoos[intersect, 0], intercoos[intersect, 1])
         shell = np.zeros(intersect.sum())
+        sector = np.zeros_like(shell) * np.nan
         for s in self.shells:
-            ind = (s['r_in'] < r) & (r < s['r_out']) & (phi < self.conf['shell_half_opening_angle'])
+            ind = ((s['r_in'] < r) &
+                   (r < s['r_out']))
             shell[ind] = s['shell']
-        refl[shell < 1] = 0
-        #import pbd
-        #pdb.set_trace()
+        for chan in self.conf['channels']:
+            # Get angle rotation around  direction
+            rotang = mat2euler(conf['rotchan'][chan])[2]
+            halfang = conf['shell_half_opening_angle']
+            for x in [0, np.pi]:
+                sector[angle_between(phi,
+                                     rotang + x - halfang,
+                                     rotang + x + halfang)
+                       ] = int(chan)
+        refl[(shell < 1) | np.isnan(sector)] = 0
         return {'dir': dir, 'polarization': pol, 'probability': refl,
-                'refl_ang': refl_angle, 'shell': shell}
-
+                'refl_ang': refl_angle, 'shell': shell, 'sector': sector}
 
 
 class SimpleMirror(optics.FlatStack):
@@ -167,7 +196,6 @@ class SimpleMirror(optics.FlatStack):
         return self.refl
 
     def __init__(self, conf):
-        refl = self.refl()
         kwords = [{'conf': conf, 'focallength': conf['f']},
                   {'inplanescatter': conf['inscat'],
                    'perpplanescatter': conf['perpscat']},
@@ -191,14 +219,13 @@ def outsidemirror(photons):
     return photons
 
 
-
 class PiGrid(GratingGrid):
 
     def elempos(self):
-        '''This elempos makes a regular grid, very similar to Mark Egan's design.'''
+        '''This elempos makes a regular grid, similar to Mark Egan's design.'''
         dx = 2 * self.conf['gratingzoom'][1] + 2 * self.conf['gratingframe'][1]
         dy = 2 * self.conf['gratingzoom'][2] + self.conf['gratingframe'][2]
-        #x = np.arange(-2, 2.1) * dx
+        # x = np.arange(-2, 2.1) * dx
         y_pos = np.arange(self.y_in[0], self.y_in[1], dy)
         mx = []
         my = []
@@ -224,8 +251,10 @@ class PiGrid(GratingGrid):
         z = np.array([self.z_from_xy(mx[i], -my[i]) for i in range(len(mx))])
         rg, gamma, beta = self.cart2sph(mx, my, z)
 
-        ang_in = np.arctan2(self.mirrorpos['r_in'] - self.conf['gratingzoom'][2], self.mirrorpos['f'])
-        ang_out = np.arctan2(self.mirrorpos['r_out'] + self.conf['gratingzoom'][2], self.mirrorpos['f'])
+        ang_in = np.arctan2(self.mirrorpos['r_in'] -
+                            self.conf['gratingzoom'][2], self.mirrorpos['f'])
+        ang_out = np.arctan2(self.mirrorpos['r_out'] +
+                             self.conf['gratingzoom'][2], self.mirrorpos['f'])
 
         ind = (np.abs(beta) > ang_in) & (np.abs(beta) < ang_out)
         return np.vstack([mx[ind], my[ind], z[ind], np.ones(ind.sum())]).T
@@ -241,7 +270,7 @@ class PiGratings(CATGratings):
 
     def __init__(self, conf, **kwargs):
         self.conf = conf
-        super().__init__('1', conf, **kwargs)
+        super().__init__(conf['channels'], conf, **kwargs)
 
 
 class Detectors(simulator.Parallel):
@@ -262,22 +291,21 @@ class Detectors(simulator.Parallel):
                         names=['energy', 'qe', 'temp1', 'temp2'])
         qe['energy'] = 1e-3 * qe['energy']  # eV to keV
 
-
         al['energy'] = 1e-3 * al['energy']  # eV to keV
         poly['energy'] = 1e-3 * poly['energy']  # ev to keV
 
-
         detkwargs = {'pixsize': conf['pixsize']}
         detzoom = np.array([1, conf['pixsize'] * conf['detsize'][0] / 2,
-                             conf['pixsize'] * conf['detsize'][1] / 2])
+                            conf['pixsize'] * conf['detsize'][1] / 2])
 
         detposlist = [affines.compose(conf['det0pos'],
                                       euler2mat(0, np.pi/2, 0, 'sxyz'),
-                                      detzoom),
-                      affines.compose(conf['det1pos'],
-                                      euler2mat(0, 0, 0, 'sxyz'),
-                                      detzoom),
-        ]
+                                      detzoom)]
+        for chan in conf['channels']:
+            detpos = affines.compose(conf['det1pos'],
+                                     euler2mat(0, 0, 0, 'sxyz'),
+                                     detzoom)
+            detposlist.append(affpihalf @ conf['rotchan'][chan] @ detpos)
         ccd_args = {'elements': (optics.FlatDetector,
                                  optics.EnergyFilter,
                                  optics.EnergyFilter,
@@ -292,8 +320,8 @@ class Detectors(simulator.Parallel):
                                  {'filterfunc': interp1d(qe['energy'],
                                                          qe['qe']),
                                   'name': 'CCD QE'},
-                    ),
-        }
+                                 ),
+                    }
         super().__init__(elem_class=optics.FlatStack,
                          elem_pos=detposlist,
                          elem_args=ccd_args,
@@ -305,8 +333,8 @@ class Detectors(simulator.Parallel):
         self.disp['color'] = (0., 0., 1.)
         self.disp['box-half'] = '+x'
 
-        self.elements[0].display = self.disp
-        self.elements[1].display = self.disp
+        for e in self.elements:
+            e.display = self.disp
 
 
 def effective_baffle(photons):
@@ -318,39 +346,45 @@ def effective_baffle(photons):
 
     Thus should eventually be replaced by a proper geometric baffle.
     '''
-    ind = photons['CCD_ID'] == 1
+    ind = photons['CCD_ID'] >= 1
     ind2 = np.isfinite(photons['mlwave_nominal'])
     photons['probability'][ind & ~ind2] = 0.
     return photons
 
 
 class PerfectPisox(simulator.Sequence):
-    '''Intialization that onle a few lines is done here.
+    '''Intialization that only a few lines is done here.
     When it gets longer it gets split out into a separate class.
     '''
     def init_aper(self, conf):
         x = conf['aper_rin'] - conf['mirr_rout']
-        return optics.MultiAperture(elements=[
-            RectangleAperture(orientation=euler2mat(0, -np.pi / 2, 0, 'sxyz'),
-                              position=[x, 0, conf['aper_z']],
-                              zoom=conf['aper_zoom']),
-            RectangleAperture(orientation=euler2mat(0, -np.pi / 2, 0, 'sxyz'),
-                              position=[-x, 0, conf['aper_z']],
-                              zoom=conf['aper_zoom'])]
-                                    )
-
+        apers = []
+        for chan in conf['channels']:
+            for rot in [0, np.pi]:
+                rot = conf['rotchan'][chan] @ euler2aff(rot, 0, 0, 'szyz')
+                pos = affines.compose([0, x, conf['aper_z']],
+                                      euler2mat(0, -np.pi / 2, 0, 'sxyz'),
+                                      conf['aper_zoom'])
+                apers.append(RectangleAperture(pos4d=rot @ pos))
+        return optics.MultiAperture(elements=apers)
 
     def init_ml(self, conf):
         c = conf['ML']
-        datafile = os.path.join(inputpath, c['mirrorfile'])
-        ml = LGMLMirror(position=c['pos'],
-                        orientation=euler2mat(0, -np.pi / 4, 0, 'sxyz'),
-                        zoom=c['zoom'],
-                        datafile=datafile,
-                        lateral_gradient = c['lateral_gradient'],
-                        spacing_at_center = c['spacing_at_center'],
-                        refl_theory=refl_theory)
-        return ml
+        mls = []
+        for chan in conf['channels']:
+            pos = affines.compose(c['pos'],
+                                  euler2mat(0, -np.pi / 4, 0, 'sxyz'),
+                                  c['zoom'])
+            pos = affpihalf @ pos
+            mls.append(conf['rotchan'][chan] @ pos)
+        lgml_args = {'datafile': os.path.join(inputpath, c['mirrorfile']),
+                     'lateral_gradient': c['lateral_gradient'],
+                     'spacing_at_center': c['spacing_at_center'],
+                     'refl_theory': refl_theory}
+        return simulator.Parallel(elem_class=LGMLMirror,
+                                  elem_pos=mls,
+                                  elem_args=lgml_args,
+                                  id_col='ML_ID')
 
     def post_process(self):
         self.KeepPos = simulator.KeepCol('pos')
@@ -363,8 +397,8 @@ class PerfectPisox(simulator.Sequence):
                 PiGratings(conf),
                 self.init_ml(conf),
                 Detectors(conf),
-                effective_baffle,
-        ]
+                # effective_baffle,
+                ]
         super().__init__(elements=elem, postprocess_steps=self.post_process(),
                          **kwargs)
         # Shift the center of the grating assembly to the

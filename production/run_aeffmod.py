@@ -9,12 +9,14 @@ import sys
 sys.path.append('..')
 
 # I used 17 - 61 before, not sure why.
-wave = np.arange(30., 85., 1.) * u.Angstrom
+wave = np.arange(30., 83., 1.) * u.Angstrom
 orders = ['all', 0, -1, -2]
 
 parser = argparse.ArgumentParser(description='Run ray-tracing to determine effective area and modulation factor')
-parser.add_argument('mission', choices=['redsox', 'pisox'], help='Select mission')
-parser.add_argument('--n_photons', default=100000, type=int, help='Number of photons per simulation (default 100,000')
+parser.add_argument('mission', choices=['redsox', 'pisox', 'gosox'],
+                    help='Select mission')
+parser.add_argument('--n_photons', default=100000, type=int,
+                    help='Number of photons per simulation (default 100,000')
 args = parser.parse_args()
 
 
@@ -24,6 +26,9 @@ if args.mission == 'pisox':
 elif args.mission == 'redsox':
     from redsox.redsox import PerfectRedsox
     mission = PerfectRedsox()
+elif args.mission == 'gosox':
+    from redsox.gosox import PerfectGosox
+    mission = PerfectGosox()
 
 modulation = run_tools.run_modulation(n_photons=args.n_photons, wave=wave,
                                       mission=mission,

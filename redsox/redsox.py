@@ -19,6 +19,7 @@ from .mirror import MultiShellAperture
 
 from . import inputpath, xyz2zxy
 
+
 def euler2aff(*args, **kwargs):
     mat = euler2mat(*args, **kwargs)
     return transforms3d.affines.compose(np.zeros(3), mat, np.ones(3))
@@ -46,13 +47,13 @@ conf = {'aper_z': 2900.,
         'ML': {'mirrorfile': 'ml_refl_2019_CrScOnly_width.txt',
                'zoom': [0.25, 25., 5.],
                'pos': [44.55, 0, 0],
-    # Herman D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
-    # where x is measured from the short wavelength end of the mirror.
-    # In marxs x is measured from the center, and the center is
-    # 44.55 from the focal point
+               # D(x) = 0.88 Ang/mm * x (in mm) + 26 Ang,
+               # x is measured from the short wavelength end of the mirror.
+               # In marxs x is measured from the center, and the center is
+               # 44.55 from the focal point
                'lateral_gradient': 8.8e-8,  # Ang/mm converted to unitless
                'spacing_at_center': 0.88 * 44.55 * 1E-7,
-        },
+               },
         'pixsize': 0.024,
         'detsize0': [2048, 1024],
         'detsize123': [2048, 1024],
@@ -137,7 +138,8 @@ class SimpleMirror(optics.FlatStack):
 
 def read_grating_coords():
     '''Read grating coordinates from a file. This is currently not used.'''
-    grating_coords = Table.read(os.path.join(redsoxbase, 'GratingCoordinates.txt'),
+    grating_coords = Table.read(os.path.join(redsoxbase,
+                                             'GratingCoordinates.txt'),
                                 format='ascii.commented_header', header_start=2)
     for n in ['pitch', 'yaw', 'roll']:
         grating_coords[n] = np.deg2rad(grating_coords[n])
@@ -157,22 +159,25 @@ class CATGratings(simulator.Sequence):
 
         elements = []
 
-        # All all top sectors first so that a ray passing though overlapping top and
-        # bottom sectors correctly passes through the top grating first.
+        # All all top sectors first so that a ray passing though overlapping
+        # top and bottom sectors correctly passes through the top grating first.
         for chan in channels:
-            gg = self.GratingGrid(channel=chan, conf=conf, y_in=[-conf['grating_ypos'][1], -conf['grating_ypos'][0]],
-                             id_num_offset=conf['grat_id_offset'][chan]
-                             # color_index=self.color_index[chan]
-            )
+            gg = self.GratingGrid(channel=chan, conf=conf,
+                                  y_in=[-conf['grating_ypos'][1],
+                                        -conf['grating_ypos'][0]],
+                                  id_num_offset=conf['grat_id_offset'][chan]
+                                  # color_index=self.color_index[chan]
+                                  )
             for e in gg.elements:
                 e.display['color'] = self.color_chan[chan]
             elements.append(gg)
         # then add bottom sectors as requested
         for chan in channels:
-            gg = self.GratingGrid(channel=chan, conf=conf, y_in=conf['grating_ypos'],
-                             id_num_offset=conf['grat_id_offset'][chan] + 500
-                             # color_index=self.color_index[chan]
-            )
+            gg = self.GratingGrid(channel=chan, conf=conf,
+                                  y_in=conf['grating_ypos'],
+                                  id_num_offset=conf['grat_id_offset'][chan] + 500
+                                  # color_index=self.color_index[chan]
+                                  )
             for e in gg.elements:
                 e.display['color'] = self.color_chan[chan]
             elements.append(gg)
@@ -191,11 +196,8 @@ class MLMirrors(simulator.Parallel):
                                                 np.dot(euler2mat(-np.pi / 4, 0, 0, 'sxyz'),
                                                        xyz2zxy[:3, :3]),
                                                 c['zoom'])
-        if '1' in channels:
-            lgmlpos.append(lgmlpos1)
-        for chan in '23':
-            if chan in channels:
-                lgmlpos.append(np.dot(conf['rotchan'][chan], lgmlpos1))
+        for chan in channels:
+            lgmlpos.append(np.dot(conf['rotchan'][chan], lgmlpos1))
 
         datafile = os.path.join(inputpath, c['mirrorfile'])
         super(MLMirrors, self).__init__(elem_class=self.elem_class,
@@ -245,7 +247,7 @@ class Detectors(simulator.Parallel):
         detposlist = [transforms3d.affines.compose(conf['det0pos'],
                                                    xyz2zxy[:3, :3],
                                                    detzoom0)]
-        #Position of the detector for channel 1
+        # Position of the detector for channel 1
         det_channel = transforms3d.affines.compose(conf['det1pos'],
                                                    np.dot(flip, rot),
                                                    detzoom)
