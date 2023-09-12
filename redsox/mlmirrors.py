@@ -67,7 +67,30 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         rs = self.rs.ev(arccosang, d)
         rp = self.rp.ev(arccosang, d)
         scale = 2. / (rs + rp)
+
+        D, wave_braggpeak, wave_nominal = self.wave_bragg_nominal(photons, intersect, intercoos)
+        amp = self.amp(wave_nominal)
+        width = self.width(wave_nominal)
+        gauss1order = Gaussian1D(amplitude=amp, mean=1.,
+                                 stddev=width / 2.355)
+        # Fixed hard-coded width
+        gauss2order = Gaussian1D(amplitude=secondamp(D), mean=1.,
+                                 stddev=0.02 / 2.355)
+        wave = energy2wave / photons['energy'][intersect]
+
+        g1 = gauss1order(wave / wave_braggpeak)
+        g2 = gauss2order(wave / (wave_braggpeak / 2))
+        scale = scale * (g1 + g2)
+
         return rs * scale, rp * scale
+
+    def wave_bragg_nominal(self, photons, intersect, intercoos):
+        cosang = np.dot(photons['dir'].data[intersect, :],
+                        -self.geometry['e_x'])
+        D = self.D(intercoos[intersect, 0])
+        wave_braggpeak = 2 * D * cosang
+        wave_nominal = 2 * D * 2**(-0.5)
+        return D, wave_braggpeak, wave_nominal
 
     def __init__(self, datafile, lateral_gradient, spacing_at_center,
                  refl_theory, **kwargs):
@@ -85,7 +108,6 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         self.rp = interpolate.RectBivariateSpline(refl_theory['angle'],
                                                   refl_theory['period_lab'],
                                                   refl_theory['rp'], ky=2)
-
         self.amp = interpolate.interp1d(data['wave'], data['R'])
         self.width = interpolate.interp1d(data['wave'], data['width'])
         super(LGMLMirror, self).__init__(**kwargs)
@@ -94,32 +116,17 @@ class LGMLMirror(optics.FlatBrewsterMirror):
         return self.lateral_gradient * x + self.spacing_at_center
 
     def specific_process_photons(self, photons,
-                                 intersect, interpoos, intercoos):
-        cosang = np.dot(photons['dir'].data[intersect, :],
-                        -self.geometry['e_x'])
-        D = self.D(intercoos[intersect, 0])
-        wave_braggpeak = 2 * D * cosang
-        wave_nominal = 2 * D * 2**(-0.5)
-        amp = self.amp(wave_nominal)
-        width = self.width(wave_nominal)
-        gauss1order = Gaussian1D(amplitude=amp, mean=1.,
-                                 stddev=width / 2.355)
-        # Fixed hard-coded width
-        gauss2order = Gaussian1D(amplitude=secondamp(D), mean=1.,
-                                 stddev=0.02 / 2.355)
-        wave = energy2wave / photons['energy'][intersect]
+                                 intersect, interpos, intercoos):
+        D, wave_braggpeak, wave_nominal = self.wave_bragg_nominal(photons, intersect, intercoos)
 
         out = super(LGMLMirror, self).specific_process_photons(photons,
                                                                intersect,
-                                                               interpoos,
+                                                               interpos,
                                                                intercoos)
-        g1 = gauss1order(wave / wave_braggpeak)
-        g2 = gauss2order(wave / (wave_braggpeak / 2))
 
-        return {'probability': (g1 + g2) * out['probability'],
+        return {'probability': out['probability'],
                 'mlwave_nominal': wave_nominal,
                 'mlwave_braggpeak': wave_braggpeak,
-                'mlcosang': cosang,
                 'ml_x': intercoos[intersect, 0],
                 'dir': out['dir'],
                 'polarization': out['polarization']}

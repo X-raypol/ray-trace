@@ -4,6 +4,7 @@ from warnings import warn
 import numpy as np
 from scipy import optimize
 import astropy.units as u
+from astropy.table import Table
 from marxs.math.geometry import Cylinder
 from marxs.math.utils import h2e
 from marxs.optics import OpticalElement
@@ -15,8 +16,9 @@ from transforms3d.affines import decompose
 
 from . import inputpath
 
-globalorderselector = InterpolateEfficiencyTable(os.path.join(inputpath,
-                                                              'efficiency.csv'))
+globalorderselector = InterpolateEfficiencyTable(Table.read(os.path.join(inputpath,
+                                                              'efficiency.csv'),
+                                                            format='ascii.ecsv'))
 
 # Fix color index coloring and activate in redsox again
 

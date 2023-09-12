@@ -31,10 +31,9 @@ parser.add_argument('mission', choices=['redsox', 'pisox', 'gosox'],
                     help='Select mission')
 parser.add_argument('--n_photons', default=100000, type=int,
                     help='Number of photons per simulation (default 100,000')
-# The following action shoudl be "extend" in py 3.8+, to allow specifying multiple runs with one argument
-parser.add_argument('-s',  '--scenario', action="append", nargs="+", type=str,
+parser.add_argument('-s',  '--scenario', action="extend", nargs="+", type=str,
                     help='Specify which scenarios to to run. If argument is not set, all test will be run.')
-parser.add_argument('-e', '--exclude', action="append", nargs="+", type=str,
+parser.add_argument('-e', '--exclude', action="extend", nargs="+", type=str,
                     help='Exclude specific scenarios from running')
 args = parser.parse_args()
 
@@ -44,7 +43,7 @@ if args.mission == 'pisox':
     PerfectInstrum = pisox.PerfectPisox
     kwargs = {}
 elif args.mission == 'gosox':
-    from redsox import gosox
+    from redsox import gosox, pisox
     PerfectInstrum = gosox.PerfectGosox
     kwargs = {}
 elif args.mission == 'redsox':
@@ -133,7 +132,7 @@ if args.mission in ['pisox', 'gosox']:
             pilens.pos4d[0, 1] += 20
         else:
             lens = instrum.elements_of_class(optics.aperture.CircleAperture)[0]
-            lens.geometry['r_inner'] = lens.geometry['r_inner'] - 20
+            lens.geometry._geometry['r_inner'] = lens.geometry['r_inner'] - 20
             lens.pos4d[[0, 1], [1, 2]] = lens.pos4d[0, 1] + 20
 
     runs = {'jitter': (JitterPointing, varyattribute,
@@ -200,10 +199,6 @@ if args.scenario is None:
 else:
     scenarios = args.scenario[0]
 
-### Revise after setting parameter to extend in py3.8 when args.exlude becomes a flat list
-
-if args.exclude is not None:
-    scenarios = [e for e in scenarios if e not in args.exclude[0]]
 
 print('Running the following scenarios:', scenarios)
 
@@ -212,9 +207,10 @@ for outfile in scenarios:
     instrum = Instrum(**kwargs)
     if len(pars) > 3:
         pars[3](instrum, pars)
-    run_tolerances_for_energies2(my_source, energies, instrum,
-                                 pars[0], pars[1], pars[2],
-                                 analyzer, t_source=3 * args.n_photons * u.s)
+    tab = run_tolerances_for_energies2(my_source, energies, instrum,
+                                       pars[0], pars[1], pars[2],
+                                       analyzer,
+                                       t_source=3 * args.n_photons * u.s)
     outfull = outpath + outfile + '.fits'
     tab.write(outfull, overwrite=True)
     print('Writing {}'.format(outfull))
