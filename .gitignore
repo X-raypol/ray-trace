@@ -90,3 +90,6 @@ ENV/
 
 # editor extensions
 *.*~
+
+run_results/*
+figures/*
