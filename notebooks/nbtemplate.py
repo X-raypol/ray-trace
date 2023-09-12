@@ -1,26 +1,39 @@
-'''This module collects utilities for the Arcus notebooks.'''
+'''This module collects utilities for the RedSpx notebooks.'''
 import sys
-import os
 import subprocess
+import re
+import logging
+
 from IPython.display import display, Markdown
 
 __all__ = ['display_header']
 
-import logging
 class DisableLogger():
     def __enter__(self):
        logging.disable(logging.CRITICAL)
     def __exit__(self, a, b, c):
        logging.disable(logging.NOTSET)
 
+
+reexp = re.compile(r"(?P<version>[\d.dev]+[\d]+)[+]?(g(?P<gittag>\w+))?[.]?(d(?P<dirtydate>[\d]+))?")
+
+
+def parse_git_scm_version(version):
+    ver = reexp.match(version)
+    v = ver.group('version')
+    if not ver.group('gittag') is None:
+        v += ' (commit hash: ' + ver.group('gittag') + ')'
+    if not ver.group('dirtydate') is None:
+        v += ' (Date of dirty version: ' + ver.group('dirtydate') + ')'
+    return v
+
+
 def get_marxs_status():
     try:
-        import marxs.version
+        import marxs.version as mvers
     except ImportError:
         return 'MARXS cannot be imported. No version information is available.'
-    return 'MARXS ray-trace code version {} (commit hash: {} from {})'.format(marxs.version.version,
-                                                                             marxs.version.githash[:10],
-                                                                             marxs.version.timestamp.date())
+    return 'MARXS ray-trace code version ' + parse_git_scm_version(mvers.version)
 
 
 def get_nb_status(filename):
@@ -33,7 +46,7 @@ def get_nb_status(filename):
         No versioning information can be displayed.'''
 
     if len(gitlog) == 0:
-        return '''file: {} not found in repository (path missing or new file not yet commited?).
+        return '''file: {} not found in repository (path missing or new file not yet committed?).
         No versioning information can be displayed.'''.format(filename)
     else:
         gitlog = gitlog.split('\n')
@@ -47,7 +60,7 @@ def get_nb_status(filename):
         modifiedfiles = modifiedfiles.decode(sys.stdout.encoding)
         if filename in modifiedfiles:
             out = out + '''
-**The version shown here is modified compared to the last commited revision.**
+**The version shown here is modified compared to the last committed revision.**
 
             '''
     return out
